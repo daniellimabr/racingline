@@ -35,11 +35,12 @@ export function steer(c: CarParams, s: CarState, spd: number): number {
 export function phys(s: CarState, dt: number, p: SimParams): void {
   const c = p.car, skill = p.skill, L = c.wheelbase, LA = c.la, LB = c.lb;
   const mu = muOf(c, skill) * (s.off ? p.lot.offGrip : 1), spd = Math.hypot(s.vx, s.vy);
-  const Aav = s.cut || s.shiftT > 0 ? 0 : (((torqueAt(c, s.rpm) * ratio(c, s.gear)) * c.drivelineEff) / c.wheelRadius) / c.mass;
+  // v24 evaluates this expression twice (Aav and Afull); once is the same double.
+  const Afull = (torqueAt(c, s.rpm) * ratio(c, s.gear) * c.drivelineEff) / c.wheelRadius / c.mass;
+  const Aav = s.cut || s.shiftT > 0 ? 0 : Afull;
   const A = s.t * Aav, D = s.b * c.brakeDecel;
   const Wf = Math.max(c.frontWeightMin, Math.min(c.frontWeightMax, c.staticFrontWeight - (c.cgHeightRatio * s.axp) / G));
   const Wr = 1 - Wf, Gf = mu * G * Wf, Gr = mu * G * Wr;
-  const Afull = (((torqueAt(c, s.rpm) * ratio(c, s.gear)) * c.drivelineEff) / c.wheelRadius) / c.mass;
   const u = A / Gr;
   s.u = u;
   s.lim = Math.min(1, Gr / Math.max(0.01, Afull));
