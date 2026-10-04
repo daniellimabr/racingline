@@ -1,15 +1,60 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RacingLine</title>
-  </head>
-  <body>
-    <main id="app">
-      <h1>RacingLine</h1>
-      <p>The ported game is under construction (Sprint 001). The playable reference is prototype/prototype-v24.html.</p>
-    </main>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RacingLine</title>
+<!-- Layout and styles ported from prototype/prototype-v24.html (frozen reference). UI text is Portuguese, as in v24. -->
+<style>
+  :root{
+    /* --text-muted is darker than v24's #8a93a3 in light mode so hint text meets 4.5:1 contrast on white. */
+    --text-primary:#1d2430; --text-secondary:#4a5363; --text-muted:#6b7280;
+    --surface-1:#f4f5f7; --surface-2:#ffffff; --border:rgba(0,0,0,0.12); --border-strong:rgba(0,0,0,0.25);
+    --radius:8px; color-scheme:light dark;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --text-primary:#eef0f3; --text-secondary:#b8bfcb; --text-muted:#8a93a3;
+      --surface-1:#1b1f26; --surface-2:#262b33; --border:rgba(255,255,255,0.12); --border-strong:rgba(255,255,255,0.25); }
+  }
+  html,body{margin:0;background:var(--surface-2);color:var(--text-primary);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:900px;margin:0 auto;padding:16px}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+  .btn{padding:4px 12px;border-radius:var(--radius);border:0.5px solid var(--border-strong);background:var(--surface-2);color:var(--text-primary);cursor:pointer}
+  #cv:focus-visible,.btn:focus-visible,#sk:focus-visible{outline:2px solid #3a8fd9;outline-offset:2px}
+  .panel{background:var(--surface-1);border:0.5px solid var(--border);border-radius:12px;padding:10px 12px}
+  .key{display:inline-block;width:14px;height:3px;vertical-align:middle}
+</style>
+</head>
+<body>
+<main class="wrap">
+<h1 class="sr-only">RacingLine: pátio de drift com linha de trajetória projetada, halo de tração, diagrama dos eixos e telemetria de drift.</h1>
+<div style="padding:0.5rem 0">
+<canvas id="cv" width="640" height="420" tabindex="0" role="img" aria-label="Pátio de testes com o carro, a linha de trajetória projetada e o painel de instrumentos. Clique para focar e dirija com W, A, S, D." style="width:100%;border-radius:12px;display:block;outline:none;cursor:pointer"></canvas>
+<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:14px;color:var(--text-secondary)">
+<label style="display:flex;gap:8px;align-items:center">Experiência <input id="sk" type="range" min="0" max="1" step="0.05" value="0.4" aria-valuetext="40%"> <span id="skv" aria-hidden="true" style="color:var(--text-primary);min-width:32px">40%</span></label>
+<button id="ps" type="button" class="btn"><span id="pst">Pausar (P)</span></button>
+<button id="rs" type="button" class="btn">Reiniciar</button>
+<span id="msg" role="status" style="color:var(--text-muted)">Clique no pátio para focar</span>
+</div>
+<div class="panel" style="margin-top:14px">
+<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-bottom:6px">
+<span><span class="key" style="background:#5fd16b"></span> Acelerador</span>
+<span><span class="key" style="height:0;border-top:2px dashed #8a93a3"></span> Limite de tração</span>
+<span><span class="key" style="background:#e8902a"></span> RPM (0–8000)</span>
+<span><span class="key" style="background:#3a8fd9"></span> Derrapagem (0–90°)</span>
+<span><span class="key" style="background:#c45ad9"></span> Intensidade do halo</span>
+<span><span class="key" style="height:8px;background:rgba(58,143,217,0.16)"></span> Drift</span>
+</div>
+<canvas id="tc" width="640" height="190" role="img" aria-label="Gráfico dos últimos 12 segundos: acelerador, limite de tração, rotação, derrapagem e intensidade do halo." style="width:100%;display:block"></canvas>
+</div>
+<div class="panel" style="margin-top:12px">
+<h2 style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0 0 6px">Seus drifts</h2>
+<div style="overflow-x:auto"><table id="dt" style="width:100%;border-collapse:collapse;font-size:12px;color:var(--text-secondary);white-space:nowrap"></table></div>
+<h2 style="font-size:14px;font-weight:500;color:var(--text-primary);margin:12px 0 4px">Análise</h2>
+<div id="an" aria-live="polite" style="font-size:13px;color:var(--text-secondary);line-height:1.6">Faça alguns drifts para gerar a análise.</div>
+</div>
+</div>
+</main>
+<script type="module" src="/src/main.ts"></script>
+</body>
 </html>
