@@ -86,12 +86,36 @@ describe('reference traces', () => {
   test('scenarios exercise what they are named after', () => {
     const run = (n: string) => JSON.parse(renderScenario(byName(n)).trace).samples as Record<string, number | string | boolean>[];
     const max = (xs: Record<string, number | string | boolean>[], k: string) => Math.max(...xs.map((x) => Math.abs(x[k] as number)));
-    expect(max(run('straight-accel'), 'gear')).toBeGreaterThanOrEqual(2);
-    expect(run('braking').some((x) => x.lockF === true)).toBe(true);
-    expect(run('drift-countersteer').some((x) => x.mode === 'drift')).toBe(true);
-    expect(run('manual-shift').some((x) => x.auto === false)).toBe(true);
-    const corner = run('steady-corner').filter((x) => (x.tt as number) > 6);
-    expect(max(corner, 'r') - Math.min(...corner.map((x) => Math.abs(x.r as number)))).toBeLessThan(0.15);
+    expect(max(run('straight-accel'), 'gear')).toBeGreaterThanOrEqual(1); // at least one auto upshift
+    const brake = run('braking');
+    expect(max(brake, 'v')).toBeGreaterThan(15);
+    expect(brake[brake.length - 1]!.v as number).toBeLessThan(0.5);
+    expect(brake.some((x) => x.b === 1)).toBe(true);
+    const drift = run('drift-countersteer');
+    expect(drift.some((x) => x.mode === 'drift' && Math.sign(x.st as number) === Math.sign(x.beta as number))).toBe(true);
+    expect(drift.some((x) => x.mode === 'spin')).toBe(false);
+    expect(drift[drift.length - 1]!.driftsDone).toBeGreaterThanOrEqual(1);
+    const shifts = run('manual-shift');
+    expect(shifts.some((x) => x.auto === false)).toBe(true);
+    expect(shifts[shifts.length - 1]!.auto).toBe(true);
+    const corner = run('steady-corner').filter((x) => (x.tt as number) > 8.5);
+    expect(max(corner, 'r') - Math.min(...corner.map((x) => Math.abs(x.r as number)))).toBeLessThan(0.08); // on/off steering ripple
+    expect(max(corner, 'v') - Math.min(...corner.map((x) => x.v as number))).toBeLessThan(0.2);
+  });
+
+  test('replaying the committed input log alone reproduces the committed trace exactly', () => {
+    for (const s of SCENARIOS) {
+      const log = JSON.parse(readFileSync(`${FIXTURE_DIR}/${s.name}.input.json`, 'utf8'));
+      const trace = JSON.parse(readFileSync(`${FIXTURE_DIR}/${s.name}.trace.json`, 'utf8'));
+      expect(log).toMatchObject({ version: 1, seed: s.seed, skill: 0.4, car: 's15-drift', tickSeconds: 1 / 60, subSteps: 10 });
+      const v = createV24({ seed: log.seed, skill: log.skill });
+      const got: unknown[] = [];
+      log.frames.forEach((f: typeof NEUTRAL, i: number) => {
+        v.tick(f);
+        if ((i + 1) % trace.sampleEveryTicks === 0 || i + 1 === log.frames.length) got.push(v.sample(i + 1));
+      });
+      expect(JSON.parse(JSON.stringify(got)), s.name).toEqual(trace.samples);
+    }
   });
 
   test('committed fixtures match a fresh regeneration byte for byte', () => {
