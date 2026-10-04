@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import {
-  FIXTURE_DIR, SCENARIOS, V24_PATH, createV24, defaultSkill, extractScript, mulberry32, renderScenario,
+  FIXTURE_DIR, MODES, SCENARIOS, V24_PATH, createV24, defaultSkill, extractScript, mulberry32, renderScenario,
 } from '../tools/v24-traces.mjs';
 
 const V24_SHA256 = '2f07c3ae431ddceb055268bfd608b7e624d3005ae31993fbaaf057fa535ee239';
@@ -84,35 +84,37 @@ describe('reference traces', () => {
   });
 
   test('scenarios exercise what they are named after', () => {
-    const run = (n: string) => JSON.parse(renderScenario(byName(n)).trace).samples as Record<string, number | string | boolean>[];
-    const max = (xs: Record<string, number | string | boolean>[], k: string) => Math.max(...xs.map((x) => Math.abs(x[k] as number)));
+    type Sample = Record<string, number>;
+    const run = (n: string) => JSON.parse(renderScenario(byName(n)).trace).samples as Sample[];
+    const max = (xs: Sample[], k: string) => Math.max(...xs.map((x) => Math.abs(x[k]!)));
+    const DRIFT = MODES.indexOf('drift'), SPIN = MODES.indexOf('spin');
     expect(max(run('straight-accel'), 'gear')).toBeGreaterThanOrEqual(1); // at least one auto upshift
     const brake = run('braking');
     expect(max(brake, 'v')).toBeGreaterThan(15);
-    expect(brake[brake.length - 1]!.v as number).toBeLessThan(0.5);
+    expect(brake[brake.length - 1]!.v).toBeLessThan(0.5);
     expect(brake.some((x) => x.b === 1)).toBe(true);
     const drift = run('drift-countersteer');
-    expect(drift.some((x) => x.mode === 'drift' && Math.sign(x.st as number) === Math.sign(x.beta as number))).toBe(true);
-    expect(drift.some((x) => x.mode === 'spin')).toBe(false);
+    expect(drift.some((x) => x.mode === DRIFT && Math.sign(x.st!) === Math.sign(x.beta!))).toBe(true);
+    expect(drift.some((x) => x.mode === SPIN)).toBe(false);
     expect(drift[drift.length - 1]!.driftsDone).toBeGreaterThanOrEqual(1);
     const shifts = run('manual-shift');
-    expect(shifts.some((x) => x.auto === false)).toBe(true);
-    expect(shifts[shifts.length - 1]!.auto).toBe(true);
-    const corner = run('steady-corner').filter((x) => (x.tt as number) > 8.5);
-    expect(max(corner, 'r') - Math.min(...corner.map((x) => Math.abs(x.r as number)))).toBeLessThan(0.08); // on/off steering ripple
-    expect(max(corner, 'v') - Math.min(...corner.map((x) => x.v as number))).toBeLessThan(0.2);
+    expect(shifts.some((x) => x.auto === 0)).toBe(true);
+    expect(shifts[shifts.length - 1]!.auto).toBe(1);
+    const corner = run('steady-corner').filter((x) => x.tt! > 8.5);
+    expect(max(corner, 'r') - Math.min(...corner.map((x) => Math.abs(x.r!)))).toBeLessThan(0.08); // on/off steering ripple
+    expect(max(corner, 'v') - Math.min(...corner.map((x) => x.v!))).toBeLessThan(0.2);
   });
 
   test('replaying the committed input log alone reproduces the committed trace exactly', () => {
     for (const s of SCENARIOS) {
-      const log = JSON.parse(readFileSync(`${FIXTURE_DIR}/${s.name}.input.json`, 'utf8'));
-      const trace = JSON.parse(readFileSync(`${FIXTURE_DIR}/${s.name}.trace.json`, 'utf8'));
+      const trace = JSON.parse(readFileSync(`${FIXTURE_DIR}/${s.name}.trace.json`, 'utf8')), log = trace.inputLog;
+      expect(Object.keys(trace)).toEqual(['version', 'source', 'scenario', 'inputLog', 'stride', 'samples']);
       expect(log).toMatchObject({ version: 1, seed: s.seed, skill: 0.4, car: 's15-drift', tickSeconds: 1 / 60, subSteps: 10 });
       const v = createV24({ seed: log.seed, skill: log.skill });
       const got: unknown[] = [];
       log.frames.forEach((f: typeof NEUTRAL, i: number) => {
         v.tick(f);
-        if ((i + 1) % trace.sampleEveryTicks === 0 || i + 1 === log.frames.length) got.push(v.sample(i + 1));
+        if ((i + 1) % trace.stride === 0) got.push(v.sample(i + 1));
       });
       expect(JSON.parse(JSON.stringify(got)), s.name).toEqual(trace.samples);
     }
@@ -121,16 +123,22 @@ describe('reference traces', () => {
   test('committed fixtures match a fresh regeneration byte for byte', () => {
     for (const s of SCENARIOS) {
       const out = renderScenario(s);
-      expect(readFileSync(`${FIXTURE_DIR}/${s.name}.input.json`, 'utf8'), s.name).toBe(out.inputLog);
       expect(readFileSync(`${FIXTURE_DIR}/${s.name}.trace.json`, 'utf8'), s.name).toBe(out.trace);
     }
   });
 
-  test('fixtures stay small (under 1 MB in total) and hold only finite numbers', () => {
+  test('fixtures stay small (under 1 MB in total) and every sample signal is a finite number', () => {
     const files = readdirSync(FIXTURE_DIR).filter((f) => f.endsWith('.json'));
-    expect(files.length).toBe(SCENARIOS.length * 2);
+    expect(files.length).toBe(SCENARIOS.length);
     expect(files.reduce((n, f) => n + statSync(`${FIXTURE_DIR}/${f}`).size, 0)).toBeLessThan(1_000_000);
-    for (const f of files) expect(readFileSync(`${FIXTURE_DIR}/${f}`, 'utf8')).not.toMatch(/null|NaN|Infinity/);
+    for (const f of files) {
+      const t = JSON.parse(readFileSync(`${FIXTURE_DIR}/${f}`, 'utf8'));
+      const keys = Object.keys(t.samples[0]).join();
+      for (const s of t.samples) {
+        expect(Object.keys(s).join(), f).toBe(keys);
+        for (const x of Object.values(s)) expect(Number.isFinite(x), f).toBe(true);
+      }
+    }
   });
 
   test('running the extractor leaves the frozen prototype untouched', () => {

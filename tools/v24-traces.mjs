@@ -2,10 +2,9 @@
 // S001-T2: v24 reference-trace extractor.
 // Runs the frozen prototype's OWN script (read from prototype/prototype-v24.html at runtime, never
 // copied) inside a Node vm context with minimal DOM stubs, feeds InputFrame v1 sequences at a fixed
-// 1/60 s per step(dt) call, and writes test/fixtures/v24/<scenario>.input.json + .trace.json.
+// 1/60 s per step(dt) call, and writes test/fixtures/v24/<scenario>.trace.json (input log inline).
 //   node tools/v24-traces.mjs          (regenerate all fixtures; npm run traces)
-// Formats: docs/sprints/SPRINT-001/mailbox/physics-dev-to-database-trace-format.md (outside the repo).
-import { createHash } from 'node:crypto';
+// Formats: docs/sprints/SPRINT-001/mailbox/database-to-physics-dev-trace-format.md (outside the repo).
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
@@ -102,17 +101,28 @@ export function createV24({ seed, skill, html = readFileSync(V24_PATH, 'utf8') }
     emitCalls: () => emits,
     sample(tick) {
       const S = api.S(), ts = api.tractionState(), pr = api.predict(skill), end = pr.pts[pr.pts.length - 1];
-      const out = { tick };
-      for (const k of SAMPLE_FIELDS) out[k] = S[k];
-      Object.assign(out, {
+      const raw = { tick };
+      for (const k of SAMPLE_FIELDS) raw[k] = S[k];
+      Object.assign(raw, {
+        mode: MODES.indexOf(S.mode),
         haloRisk: ts.risk, haloRear: ts.rear, haloP: ts.p, haloWarn: ts.warn, haloRising: ts.rising,
-        predSlip: pr.slip, predEndPx: [end[0], end[1]],
+        predSlip: pr.slip, predEndX: end[0], predEndY: end[1],
         drifting: api.cur() !== null, driftsDone: api.drifts().length,
       });
+      // ReferenceTrace v1 (Database): every signal is a finite number, yes/no stored as 0/1.
+      const out = {};
+      for (const [k, x] of Object.entries(raw)) {
+        const n = typeof x === 'boolean' ? (x ? 1 : 0) : x;
+        if (typeof n !== 'number' || !Number.isFinite(n)) throw new Error(`v24 signal ${k} is not a finite number: ${x}`);
+        out[k] = n;
+      }
       return out;
     },
   };
 }
+
+/** v24 S.mode strings, stored in traces as their index (mode 0 = grip). */
+export const MODES = ['', 'front', 'rear', 'drift', 'spin'];
 
 // v24 state fields the port must reproduce (render-only wheel angles wF/wR and the derivative
 // memories pF0/pR0/b0 are left out; the latter equal uFs/uRs/|beta| after every tick).
@@ -120,7 +130,7 @@ const SAMPLE_FIELDS = [
   'tt', 'x', 'y', 'h', 'vx', 'vy', 'r', 'v', 'beta', 't', 'b', 'st', 'delta', 'wob',
   'af', 'ar', 'axp', 'u', 'lim', 'wspin', 'spinR', 'lockF', 'useF', 'useR', 'uFs', 'uRs',
   'dFs', 'dRs', 'dB', 'riskF', 'riskR', 'rateF', 'rateR',
-  'gear', 'auto', 'rpm', 'groundRpm', 'cut', 'shiftT', 'shiftCd', 'mode', 'off',
+  'gear', 'auto', 'rpm', 'groundRpm', 'cut', 'shiftT', 'shiftCd', 'off',
 ];
 
 // ---- Scenarios. input(i, S) returns the keys for tick i; it may read the v24 state S (a scripted
@@ -166,28 +176,26 @@ export function renderScenario(sc, html = readFileSync(V24_PATH, 'utf8')) {
   const skill = defaultSkill(html);
   const v = createV24({ seed: sc.seed, skill, html });
   const frames = [], samples = [], n = tk(sc.seconds);
+  if (n % SAMPLE_EVERY !== 0) throw new Error(`${sc.name}: tick count ${n} must be a multiple of the stride`);
   for (let i = 0; i < n; i++) {
     const f = { ...NEUTRAL, ...sc.input(i, v.state()) };
     frames.push(f);
     v.tick(f);
-    if ((i + 1) % SAMPLE_EVERY === 0 || i + 1 === n) samples.push(v.sample(i + 1));
+    if ((i + 1) % SAMPLE_EVERY === 0) samples.push(v.sample(i + 1));
   }
   if (v.randomCalls() !== frames.length) throw new Error(`${sc.name}: expected one wobble draw per tick`);
-  const inputLog = { version: 1, seed: sc.seed, skill, car: CAR, tickSeconds: TICK, subSteps: SUB_STEPS, frames };
-  const trace = {
-    version: 1, source: 'prototype-v24', scenario: sc.name, about: sc.about,
-    prototypeSha256: createHash('sha256').update(html).digest('hex'),
-    inputLog: `${sc.name}.input.json`, ticks: frames.length, sampleEveryTicks: SAMPLE_EVERY, samples,
-  };
-  return { inputLog: toJson(inputLog), trace: toJson(trace) };
+  // ReferenceTrace v1 as validated by src/data/trace.ts (Database, S001-T5): exactly these keys.
+  const inputLog = toJson({ version: 1, seed: sc.seed, skill, car: CAR, tickSeconds: TICK, subSteps: SUB_STEPS, frames });
+  const head = toJson({ version: 1, source: 'prototype-v24', scenario: sc.name });
+  const tail = toJson({ stride: SAMPLE_EVERY, samples });
+  return { trace: `${head.slice(0, -3)},\n"inputLog":${inputLog.slice(0, -1)},\n${tail.slice(2)}` };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   mkdirSync(FIXTURE_DIR, { recursive: true });
   for (const sc of SCENARIOS) {
-    const out = renderScenario(sc);
-    writeFileSync(`${FIXTURE_DIR}/${sc.name}.input.json`, out.inputLog);
-    writeFileSync(`${FIXTURE_DIR}/${sc.name}.trace.json`, out.trace);
-    console.log(`${sc.name}: ${out.inputLog.length + out.trace.length} bytes`);
+    const { trace } = renderScenario(sc);
+    writeFileSync(`${FIXTURE_DIR}/${sc.name}.trace.json`, trace);
+    console.log(`${sc.name}: ${trace.length} bytes`);
   }
 }
