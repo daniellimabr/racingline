@@ -1,0 +1,20 @@
+name: CI
+on:
+  push:
+    branches: ['main', 'sprint/**']
+  pull_request:
+    branches: ['main', 'sprint/**']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Secret scan
+        run: node tools/scan-secrets.mjs --all
+      - name: Tests (incl. prototype lock; physics regression from Sprint 001)
+        run: node --test

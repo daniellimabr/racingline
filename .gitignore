@@ -1,0 +1,37 @@
+# Dependencies & build output
+node_modules/
+dist/
+coverage/
+*.log
+
+# Local telemetry / saves (ADR-002): never committed
+telemetry-data/
+saves/
+
+# Secrets: never committed (also enforced by tools/scan-secrets.mjs)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.ppk
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+credentials*.json
+
+# Editors / OS
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Harness lives outside this repo; guard against accidental copies
+CLAUDE.md
+.claude/
+harness/
+docs/

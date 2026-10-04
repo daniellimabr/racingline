@@ -1,0 +1,12 @@
+{
+  "name": "racingline",
+  "private": true,
+  "type": "module",
+  "description": "RacingLine: web racing game with a player-drawn racing line.",
+  "scripts": {
+    "test": "node --test",
+    "scan": "node tools/scan-secrets.mjs --all",
+    "serve": "python -m http.server 8000 --bind 127.0.0.1 --directory prototype"
+  },
+  "engines": { "node": ">=20" }
+}
