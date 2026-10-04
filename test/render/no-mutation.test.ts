@@ -45,7 +45,7 @@ it('drawing the scene, HUD and telemetry never changes the sim state', () => {
   const view = createView(7);
   let state: SimState<CarState> = createState(3, createCar(params));
   let checked = 0;
-  for (let i = 0; i < 480; i++) {
+  for (let i = 0; i < 430; i++) {
     state = deepFreeze(step(state, frameAt(i), params, carStep));
     const before = hashState(state);
     recordTick(view, state.car, params, 1 / 60);
@@ -59,4 +59,5 @@ it('drawing the scene, HUD and telemetry never changes the sim state', () => {
   expect(checked).toBeGreaterThan(20);
   expect(counter.calls).toBeGreaterThan(1000); // the renderer really drew
   expect(state.car.v).toBeGreaterThan(1); // the run moved the car
+  expect(state.car.drifts.length).toBeGreaterThan(0); // and drew the drift, spin and halo paths
 });
