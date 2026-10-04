@@ -125,6 +125,27 @@ describe('one-tick presses', () => {
     fire('blur');
     expect(kb.sample().toggleAuto).toBe(true);
   });
+
+  test('presses between samples are delivered one per sample, in order, repeats kept', () => {
+    const { target, fire } = fakeTarget();
+    const kb = new KeyboardDevice(target);
+    fire('keydown', 'KeyM');
+    fire('keydown', 'Period');
+    fire('keydown', 'KeyM');
+    expect(kb.sample()).toEqual({ ...IDLE, toggleAuto: true });
+    expect(kb.sample()).toEqual({ ...IDLE, shiftUp: true });
+    expect(kb.sample()).toEqual({ ...IDLE, toggleAuto: true });
+    expect(kb.sample()).toEqual(IDLE);
+  });
+
+  test('clearPresses drops pending presses but keeps held keys', () => {
+    const { target, fire } = fakeTarget();
+    const kb = new KeyboardDevice(target);
+    fire('keydown', 'KeyW');
+    fire('keydown', 'Period');
+    kb.clearPresses();
+    expect(kb.sample()).toEqual({ ...IDLE, throttle: 1 });
+  });
 });
 
 describe('pause and lifecycle', () => {
