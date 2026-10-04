@@ -43,6 +43,10 @@ describe('validateCarParams (S001-AC-09 generic part)', () => {
     expect(parseCarParams(SAMPLE, JSON.parse(JSON.stringify(original)), 'sample.json')).toEqual(original);
   });
 
+  it('names one-sided bounds in the reason', () => {
+    expect(errorsOf(params({ mass: 0.5 }))).toEqual([{ path: '$.mass', reason: 'expected a value >= 1, got 0.5' }]);
+  });
+
   it('accepts the range bounds inclusively', () => {
     expect(validateCarParams(SAMPLE, params({ gears: 8, grip: 0 })).ok).toBe(true);
   });
@@ -78,7 +82,7 @@ describe('validateCarParams (S001-AC-09 generic part)', () => {
   it('parseCarParams names the file, the field and the reason', () => {
     expect(() => parseCarParams(SAMPLE, params({ grip: 3 }), 'sample.json')).toThrowError(DataError);
     expect(() => parseCarParams(SAMPLE, params({ grip: 3 }), 'sample.json')).toThrowError(
-      /sample\.json[\s\S]*\$\.grip: .*<= 2/,
+      /sample\.json[\s\S]*\$\.grip: expected a value in 0\.\.2, got 3/,
     );
   });
 });
