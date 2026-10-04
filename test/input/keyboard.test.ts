@@ -1,5 +1,5 @@
 // S001-AC-11: key down/up events -> expected InputFrame (mirrors prototype-v24.html lines 79-85).
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, expectTypeOf, test, vi } from 'vitest';
 import { KeyboardDevice, combine, type KeyTarget } from '../../src/input/index.ts';
 import type { InputFrame } from '../../src/core/input-frame.ts';
 
@@ -144,6 +144,11 @@ describe('pause and lifecycle', () => {
     const kb = new KeyboardDevice(target);
     fire('keydown', 'KeyP');
     expect(kb.sample()).toEqual(IDLE);
+  });
+
+  test('a real canvas or window fits the event-source shape (type-level)', () => {
+    type Fits = [HTMLCanvasElement, Window] extends [KeyTarget, KeyTarget] ? true : false;
+    expectTypeOf<Fits>().toEqualTypeOf<true>();
   });
 
   test('dispose removes every listener and clears state', () => {
