@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
 jobs:
+  # Job id "test" is the required status check in branch protection: do not rename.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -14,7 +15,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
       - name: Secret scan
         run: node tools/scan-secrets.mjs --all
-      - name: Tests (incl. prototype lock; physics regression from Sprint 001)
-        run: node --test
+      - name: Install (lockfile only, no install scripts)
+        run: npm ci --ignore-scripts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests with coverage gate (prototype lock, secret scan, localhost binding; S001-AC-14)
+        run: npm run coverage
+      - name: Build
+        run: npm run build
