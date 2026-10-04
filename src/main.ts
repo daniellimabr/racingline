@@ -50,11 +50,14 @@ function reset(): void {
   view = createView(seed());
   acc = 0;
   alpha = 0;
+  keyboard.clearPresses();
   renderDrifts(state.car.drifts);
 }
 
+// Gear presses made while paused are dropped, so they cannot pile up and fire after resume.
 function togglePause(): void {
   paused = !paused;
+  keyboard.clearPresses();
   pst.textContent = paused ? 'Continuar (P)' : 'Pausar (P)';
 }
 
@@ -86,6 +89,8 @@ function blended(a: CarState, b: CarState, k: number): CarState {
 
 reset();
 let last = performance.now();
+// A hidden tab gets no frames; restart the clock on return so the sim does not catch up in one jump.
+document.addEventListener('visibilitychange', () => (last = performance.now()));
 function loop(now: number): void {
   const frame = (now - last) / 1000;
   last = now;

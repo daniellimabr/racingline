@@ -33,7 +33,8 @@ const PRESS: Readonly<Record<string, Press>> = {
 export class KeyboardDevice implements InputDevice {
   // State is per action, not per key, as in v24 (W and ArrowUp share 'w').
   private held = new Set<Held>();
-  private pending = new Set<Press>();
+  // Presses queue in order and repeats are kept; sample() delivers one per tick so none merge.
+  private pending: Press[] = [];
 
   private readonly onKeyDown = (e: KeyEventLike) => {
     if (e.code === 'KeyP') {
@@ -43,7 +44,7 @@ export class KeyboardDevice implements InputDevice {
     }
     const press = Object.hasOwn(PRESS, e.code) ? PRESS[e.code] : undefined;
     if (press && !e.repeat) {
-      this.pending.add(press);
+      this.pending.push(press);
       e.preventDefault();
       return;
     }
@@ -72,9 +73,14 @@ export class KeyboardDevice implements InputDevice {
   sample(): InputFrame {
     const f = idleFrame();
     for (const k of this.held) f[k] = 1;
-    for (const k of this.pending) f[k] = true;
-    this.pending.clear();
+    const press = this.pending.shift();
+    if (press) f[press] = true;
     return f;
+  }
+
+  /** Drops presses not yet delivered (used on pause and reset); held keys stay. */
+  clearPresses(): void {
+    this.pending.length = 0;
   }
 
   dispose(): void {
@@ -82,6 +88,6 @@ export class KeyboardDevice implements InputDevice {
     this.target.removeEventListener('keyup', this.onKeyUp);
     this.target.removeEventListener('blur', this.onBlur);
     this.held.clear();
-    this.pending.clear();
+    this.clearPresses();
   }
 }
