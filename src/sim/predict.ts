@@ -1,6 +1,6 @@
 // Projected racing line (v24 predict(), lines 207-209): where the car goes if speed and steering
 // are held, capped by grip. Points are in meters (v24 returned pixels: multiply by lot.scale).
-import { dLim, G, muOf, shape } from './physics.ts';
+import { aero, dLim, G, muOf, shape } from './physics.ts';
 import type { SimParams } from './params.ts';
 import type { CarState } from './state.ts';
 
@@ -15,7 +15,9 @@ export interface Prediction {
 }
 
 export function predict(s: CarState, p: SimParams): Prediction {
-  const c = p.car, v = Math.max(s.v, MIN_SPEED), mug = muOf(c, p.skill) * G;
+  const c = p.car, v = Math.max(s.v, MIN_SPEED), mu = muOf(c, p.skill), ae = aero(c, v);
+  // Same aero helper as phys(): the grip cap grows with downforce (+ 0 exactly without aero).
+  const mug = mu * G + mu * (ae.front + ae.rear);
   let k = Math.tan(shape(c, s.st) * dLim(c, v)) / c.wheelbase, slip = false;
   if (v * v * Math.abs(k) > mug) {
     k = (Math.sign(k) * mug) / (v * v);

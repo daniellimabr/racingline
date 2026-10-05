@@ -27,8 +27,8 @@ describe('S15 car params (S001-AC-09)', () => {
     expect(car.iz).toBe(0.45 * 2.525 * (0.55 * 2.525));
   });
 
-  it('the schema lists exactly the fields of the file', () => {
-    expect(Object.keys(CAR_SCHEMA).sort()).toEqual(Object.keys(s15).sort());
+  it('the schema plus the shared id and name list exactly the fields of the file', () => {
+    expect([...Object.keys(CAR_SCHEMA), 'id', 'name'].sort()).toEqual(Object.keys(s15).sort());
   });
 
   it.each(['mass', 'gear3', 'tireB', 'finalDrive'])('rejects a missing field "%s" and names it', (k) => {

@@ -1,5 +1,6 @@
 // S002-AC-08: with aero, the projected racing line still shows where the car goes. The GT3 enters a
-// fast corner with steering and throttle held; the line drawn at that moment is compared with the
+// fast corner with steering and throttle held (speeds where full throttle about holds the corner speed,
+// because the line assumes the speed is held); the line drawn after it settles is compared with the
 // path the sim then drives over the same distance. The line uses the same aero helper as the sim,
 // so at speed it bends with the downforce grip; a line without aero would point well wide.
 import { describe, expect, it } from 'vitest';
@@ -31,9 +32,9 @@ function driveFor(s: SimState<CarState>, p: SimParams, len: number): [number, nu
 const len = (pts: [number, number][]) => pts.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - pts[i]![0], q[1] - pts[i]![1]), 0);
 
 describe('racing line with aero (S002-AC-08)', () => {
-  it.each([160, 200])('matches the driven path at %i km/h', (kmh) => {
+  it.each([200, 240])('matches the driven path at %i km/h', (kmh) => {
     const p = open(gt3());
-    const s = corner(p, kmh, 90);
+    const s = corner(p, kmh, 200);
     const line = predict(s.car, p);
     expect(line.slip).toBe(true); // full steering asks more than the grip: the aero grip cap draws the line
     const end = line.pts[line.pts.length - 1]!;
@@ -42,7 +43,7 @@ describe('racing line with aero (S002-AC-08)', () => {
     const err = Math.hypot(got[0] - end[0], got[1] - end[1]);
     const errNoAero = Math.hypot(got[0] - noAero[0], got[1] - noAero[1]);
     console.info(`${kmh} km/h: line end ${err.toFixed(2)} m from the driven path, ${errNoAero.toFixed(2)} m without aero`);
-    expect(err).toBeLessThan(TOL);
+    expect(err, `${err} vs ${errNoAero}`).toBeLessThan(TOL);
     expect(err).toBeLessThan(errNoAero / 2);
   });
 });

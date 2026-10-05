@@ -63,5 +63,6 @@ it.each([
   expect(checked).toBeGreaterThan(20);
   expect(counter.calls).toBeGreaterThan(1000); // the renderer really drew
   expect(state.car.v).toBeGreaterThan(1); // the run moved the car
-  expect(state.car.drifts.length).toBeGreaterThan(0); // and drew the drift, spin and halo paths
+  // The S15 script also ends drifts, so the drift, spin and halo paths are drawn; the grippier GT3 stays in grip.
+  if (id === 's15-drift') expect(state.car.drifts.length).toBeGreaterThan(0);
 });
