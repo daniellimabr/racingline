@@ -33,6 +33,8 @@
   "brakeFront": 0.6,
   "brakeRear": 0.4,
   "brakeLockMargin": 0.98,
+  "rearBrakeMaxShare": 0.75,
+  "rearCornerGrip": 1.05,
   "lockUsage": 1.15,
   "dragCoef": 0,
   "rollingDecel": 0.15,
