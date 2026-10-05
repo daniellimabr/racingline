@@ -8,12 +8,13 @@ import { engine, manualShift } from './engine.ts';
 import { phys } from './physics.ts';
 import type { SimParams } from './params.ts';
 import type { CarState } from './state.ts';
+import { lotSurface, trackSurface, type AxleSurface } from './surface.ts';
 
 const MODE_SLIP = 0.13; // rad, axle slip angle that counts as sliding (v24 pk in sim())
 const SPIN_BETA = 1.3; // rad
 
 /** v24 sim(): pedals and steering travel, sub-stepped physics, engine, mode and traction risk. */
-function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: number): void {
+function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: number, surf: AxleSurface): void {
   const c = p.car;
   // v24 keys are on/off: any pedal or steering value above zero counts as held.
   s.t = k.throttle > 0 ? Math.min(1, s.t + c.throttleRise * dt) : Math.max(0, s.t - c.throttleFall * dt);
@@ -24,7 +25,7 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
     s.st += sd * (fast ? c.steerFastRate : c.steerRate) * dt;
     s.st = Math.max(-1, Math.min(1, s.st));
   } else s.st -= Math.sign(s.st) * Math.min(Math.abs(s.st), c.steerReturnRate * dt);
-  for (let i = 0; i < substeps; i++) phys(s, dt / substeps, p);
+  for (let i = 0; i < substeps; i++) phys(s, dt / substeps, p, surf);
   engine(c, s, dt);
   const ab = Math.abs(s.beta);
   s.mode =
@@ -66,10 +67,16 @@ export const carStep: CarStep<CarState, SimParams> = (car, input, p, ctx) => {
   if (input.shiftUp) manualShift(c, s, 1);
   if (input.shiftDown) manualShift(c, s, -1);
   if (input.toggleAuto) s.auto = !s.auto;
-  sim(s, dt, input, p, ctx.substeps);
+  const tr = p.track, at = p.surfaceAt;
+  if (tr && !at) throw new Error(`Track ${tr.id}: the run settings have no surface lookup (surfaceAt)`);
+  // Surfaces are read once per tick from the position at its start, as v24 held `off` across sub-steps.
+  sim(s, dt, input, p, ctx.substeps, tr && at ? trackSurface(tr, at, c, s) : lotSurface(p.lot, s.off));
   s.tt += dt;
-  const L = p.lot, px = s.x * L.scale, py = s.y * L.scale;
-  s.off = px < L.x0 || px > L.x1 || py < L.y0 || py > L.y1;
+  if (tr && at) s.off = at(tr, s.x, s.y) !== tr.road;
+  else {
+    const L = p.lot, px = s.x * L.scale, py = s.y * L.scale;
+    s.off = px < L.x0 || px > L.x1 || py < L.y0 || py > L.y1;
+  }
   trackDrift(s, dt);
   return s;
 };

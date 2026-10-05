@@ -3,6 +3,8 @@
 // "tuned" = Daniel tuned it by feel in v24 (keep unless he decides otherwise), "model" = model shape.
 import { DataError } from '../data/check.ts';
 import { parseCarParams, type CarBase, type CarParamsSchema, type ParamsOf } from '../data/car-params.ts';
+import type { Track } from '../data/track.ts';
+import type { SurfaceAt } from './surface.ts';
 
 const num = (min: number, max: number, integer = false) =>
   integer ? ({ type: 'number', min, max, integer } as const) : ({ type: 'number', min, max } as const);
@@ -136,6 +138,10 @@ export const TEST_LOT: Lot = Object.freeze({
 export interface SimParams {
   car: CarParams;
   lot: Lot;
+  /** The circuit, when driving one (absent on the lot). */
+  track?: Track;
+  /** Surface lookup for `track` (Back End, S003-T5); required whenever `track` is set. */
+  surfaceAt?: SurfaceAt;
 }
 
 export function createSimParams(car: CarParams, lot: Lot = TEST_LOT): SimParams {

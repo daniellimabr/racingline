@@ -3,6 +3,7 @@
 // as v24 so traces match exactly; `s` is the car step's private working copy and is mutated in place.
 import type { CarParams, SimParams } from './params.ts';
 import type { CarState } from './state.ts';
+import type { AxleSurface } from './surface.ts';
 
 export const G = 9.81; // m/s2 (v24 g)
 
@@ -43,10 +44,11 @@ export function steer(c: CarParams, s: CarState, spd: number): number {
   return d;
 }
 
-/** One physics sub-step (v24 phys). */
-export function phys(s: CarState, dt: number, p: SimParams): void {
+/** One physics sub-step (v24 phys) on the given surface under each axle (surface.ts). */
+export function phys(s: CarState, dt: number, p: SimParams, surf: AxleSurface): void {
   const c = p.car, L = c.wheelbase, LA = c.la, LB = c.lb;
-  const mu = c.grip * (s.off ? p.lot.offGrip : 1), spd = Math.hypot(s.vx, s.vy);
+  // On the lot both factors are v24's `s.off ? offGrip : 1`, so the lot stays bit-identical.
+  const muF = c.grip * surf.gripF, muR = c.grip * surf.gripR, spd = Math.hypot(s.vx, s.vy);
   // v24 evaluates this expression twice (Aav and Afull); once is the same double.
   const Afull = (torqueAt(c, s.rpm) * ratio(c, s.gear) * c.drivelineEff) / c.wheelRadius / c.mass;
   const Aav = s.cut || s.shiftT > 0 ? 0 : Afull;
@@ -54,7 +56,7 @@ export function phys(s: CarState, dt: number, p: SimParams): void {
   const Wf = Math.max(c.frontWeightMin, Math.min(c.frontWeightMax, c.staticFrontWeight - (c.cgHeightRatio * s.axp) / G));
   // Aero terms are added, never folded in: with zero aero `x + 0` is exact, so the S15 stays bit-identical.
   const ae = aero(c, spd);
-  const Wr = 1 - Wf, Gf = mu * G * Wf + mu * ae.front, Gr = mu * G * Wr + mu * ae.rear;
+  const Wr = 1 - Wf, Gf = muF * G * Wf + muF * ae.front, Gr = muR * G * Wr + muR * ae.rear;
   const u = A / Gr;
   s.u = u;
   s.lim = Math.min(1, Gr / Math.max(0.01, Afull));
@@ -75,7 +77,9 @@ export function phys(s: CarState, dt: number, p: SimParams): void {
     s.t < c.engineBrakeThrottle && !s.cut
       ? (c.engineBrake * Math.min(1, s.rpm / c.engineBrakeRpm) * c.gears[s.gear]!) / c.engineBrakeGearDiv
       : 0;
-  const drag = c.dragCoef * spd * spd + (mv ? c.rollingDecel + ebrake : 0) + (s.off ? spd * p.lot.offDrag : 0) + ae.drag;
+  // Surface drag is the mean of the two axles; (d + d) / 2 is exactly d, so the lot's offDrag is unchanged.
+  const sDrag = (surf.dragF + surf.dragR) / 2;
+  const drag = c.dragCoef * spd * spd + (mv ? c.rollingDecel + ebrake : 0) + (sDrag ? spd * sDrag : 0) + ae.drag;
   const dx = spd > 0.05 ? (-drag * s.vx) / spd : 0, dy = spd > 0.05 ? (-drag * s.vy) / spd : 0;
   const fLong = s.lockF ? c.lockUsage : (c.brakeFront * D) / Math.max(Gf, 0.1), rLong = (A + rB) / Math.max(Gr, 0.1);
   if (s.vx < 3 && Math.abs(s.vy) < 1.5) {
