@@ -1,0 +1,31 @@
+{
+  "reasons": [
+    "Baseline: the game as merged at a02dac2 (Sprint 001 port plus Sprint 002 car id, name and car switch); replaces the v24 trace comparison."
+  ],
+  "scenarios": {
+    "braking": {
+      "state": "68b73846460fda91",
+      "line": "5fe3a7e0d45a6a34"
+    },
+    "drift-countersteer": {
+      "state": "055c9152d4cfcf14",
+      "line": "05f1ca92924a0bff"
+    },
+    "manual-shift": {
+      "state": "be0bab2f3569ca96",
+      "line": "6449d52b35c4b0a3"
+    },
+    "steady-corner": {
+      "state": "c9df4a62c604034f",
+      "line": "1c6bb9f3be3c0248"
+    },
+    "straight-accel": {
+      "state": "69601e9078991da2",
+      "line": "755e8544805e4341"
+    },
+    "wobble": {
+      "state": "4cd617438f73dc8f",
+      "line": "f5bfd102d823632b"
+    }
+  }
+}
