@@ -4,7 +4,8 @@ import { TEL_SECONDS, type TelSample, type View } from './view.ts';
 export const TEL_W = 640;
 export const TEL_H = 190;
 
-export function drawTelemetry(t2: CanvasRenderingContext2D, view: View, now: number, dark: boolean): void {
+/** rpmScale: top of the rpm axis for the active car (carHud(car).rpmScale). */
+export function drawTelemetry(t2: CanvasRenderingContext2D, view: View, now: number, dark: boolean, rpmScale: number): void {
   const W = TEL_W, H = TEL_H, pl = 34, pr = 8, pt = 8, pb = 22, iw = W - pl - pr, ih = H - pt - pb;
   t2.clearRect(0, 0, W, H);
   const grid = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', txt = dark ? '#9aa3b2' : '#6b7280';
@@ -43,7 +44,7 @@ export function drawTelemetry(t2: CanvasRenderingContext2D, view: View, now: num
     t2.setLineDash([]);
   };
   line((d) => d.lim, '#8a93a3', 1.5, [5, 4]);
-  line((d) => d.rpm / 8000, '#e8902a', 1.5);
+  line((d) => d.rpm / rpmScale, '#e8902a', 1.5);
   line((d) => d.p, '#c45ad9', 2);
   line((d) => d.beta / (Math.PI / 2), '#3a8fd9', 2);
   line((d) => d.thr, '#5fd16b', 2.5);

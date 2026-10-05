@@ -1,7 +1,10 @@
 // Main canvas (v24 draw(), wheel(), drawDiagram(), drawTach(), lines 206-282). Reads the car and the
 // sim's view helpers (predict, tractionState); never writes sim state. UI text is Portuguese, as in v24.
 import { HALO_THRESHOLD, predict, tractionState, type CarState, type SimParams } from '../sim/index.ts';
+import { carHud, gearText } from '../ui/hud-car.ts';
+import { carLook } from './car-look.ts';
 import { WORLD_W, type LotArt } from './lot.ts';
+export { carLook, type CarLook } from './car-look.ts';
 import { DIAG, DIAG_FY, DIAG_RY, type View } from './view.ts';
 
 export const SCREEN_W = 640;
@@ -18,6 +21,8 @@ export interface Frame {
 }
 
 type RGB = [number, number, number];
+
+const SHIFT_WARN_BELOW_RED = 1500; // rpm below the redline where the tacho turns yellow
 
 /** Share as a whole percent, never above 100. */
 export const pct = (u: number): number => Math.round(Math.min(1, u) * 100);
@@ -173,7 +178,7 @@ function drawTach(c: CanvasRenderingContext2D, s: CarState, p: SimParams, sx: nu
   c.beginPath();
   c.arc(sx, sy, R, a0 + (a1 - a0) * fr, a1);
   c.stroke();
-  const col = s.cut ? (Math.sin(s.tt * 40) > 0 ? '#ff3b3b' : '#ffffff') : s.rpm > RED ? '#ff5a4e' : s.rpm > 5500 ? '#ffc83d' : '#5fd16b';
+  const col = s.cut ? (Math.sin(s.tt * 40) > 0 ? '#ff3b3b' : '#ffffff') : s.rpm > RED ? '#ff5a4e' : s.rpm > RED - SHIFT_WARN_BELOW_RED ? '#ffc83d' : '#5fd16b';
   c.strokeStyle = col;
   c.lineWidth = 5;
   c.beginPath();
@@ -181,9 +186,8 @@ function drawTach(c: CanvasRenderingContext2D, s: CarState, p: SimParams, sx: nu
   c.stroke();
   c.strokeStyle = 'rgba(255,255,255,0.6)';
   c.lineWidth = 1;
-  for (let k = 1; k <= 7; k++) {
+  for (let k = Math.ceil(IDLE / 1000); k * 1000 <= CUT; k++) {
     const ff = (k * 1000 - IDLE) / (CUT - IDLE);
-    if (ff < 0 || ff > 1) continue;
     const a = a0 + (a1 - a0) * ff;
     c.beginPath();
     c.moveTo(sx + Math.cos(a) * (R - 5), sy + Math.sin(a) * (R - 5));
@@ -303,7 +307,7 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   c.restore();
   c.globalAlpha = 1;
   // Car body, wheels (front ones steer), cockpit, headlights.
-  const fa = LA * PX, ra = LB * PX, ov = 0.96 * PX, hw = 7.6;
+  const look = carLook(p.car, PX), fa = LA * PX, ra = LB * PX, ov = look.overhang, hw = look.halfWidth;
   c.save();
   c.translate(s.x * PX, s.y * PX);
   c.rotate(s.h);
@@ -316,10 +320,11 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
     c.fillRect(-3.5, -1.8, 7, 3.6);
     c.restore();
   }
-  c.fillStyle = '#e8402f';
-  c.fillRect(-ra - ov, -hw + 1, fa + ra + 2 * ov, 2 * hw - 2);
+  c.fillStyle = look.color;
+  c.fillRect(-ra - ov, -hw + 1, look.length, 2 * hw - 2);
   c.fillStyle = '#1d2430';
   c.fillRect(-2, -hw + 2.5, 9, 2 * hw - 5);
+  if (look.wing) c.fillRect(-ra - ov - 1, -hw - 0.5, 3, 2 * hw + 1);
   c.fillStyle = '#ffe9a8';
   c.fillRect(fa + ov - 2, -hw + 2, 2, 3.5);
   c.fillRect(fa + ov - 2, hw - 5.5, 2, 3.5);
@@ -348,7 +353,8 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   c.fillText(Math.round(s.v * 3.6) + ' km/h', 24, 311);
   c.font = '12px sans-serif';
   c.fillStyle = '#8a93a3';
-  c.fillText(s.gear + 1 + 'ª ' + (s.auto ? 'auto' : 'manual') + ' · ' + Math.round(s.rpm / 100) * 100 + ' rpm', 100, 311);
+  const hud = carHud(p.car);
+  c.fillText(gearText(s.gear, hud.gearCount) + ' ' + (s.auto ? 'auto' : 'manual') + ' · ' + Math.round(s.rpm / 100) * 100 + ' rpm', 100, 311);
   const best = s.drifts.length ? Math.max(...s.drifts.map((d) => d.dur)) : 0;
   c.fillStyle = s.cur ? '#7ec8ff' : '#8a93a3';
   c.fillText('Drift ' + fmt(s.cur ? s.cur.dur : 0, 1) + 's · recorde ' + fmt(best, 1) + 's · ' + s.drifts.length + ' registrados', 24, 328);
@@ -406,9 +412,17 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   c.fillRect(L.x0 * m, L.y0 * m, (L.x1 - L.x0) * m, (L.y1 - L.y0) * m);
   c.fillStyle = '#ff7a1a';
   for (const q of f.lot.cones) c.fillRect(q[0] * m - 1, q[1] * m - 1, 2, 2);
-  c.fillStyle = '#e8402f';
+  c.fillStyle = look.color;
   c.beginPath();
   c.arc(s.x * PX * m, s.y * PX * m, 3.5, 0, 7);
   c.fill();
   c.restore();
+  // Active car name under the minimap (also shown as page text next to the controls).
+  c.fillStyle = 'rgba(29,36,48,0.8)';
+  c.fillRect(498, 114, 134, 20);
+  c.font = '500 12px sans-serif';
+  c.fillStyle = '#f4f1ea';
+  c.textAlign = 'center';
+  c.fillText(hud.name, 565, 128);
+  c.textAlign = 'left';
 }

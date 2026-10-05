@@ -6,11 +6,12 @@ import { step, TICK, type SimState } from './core/sim.ts';
 import { KeyboardDevice } from './input/index.ts';
 import { carStep, createSimParams, loadCarParams, type CarState, type DriftRecord } from './sim/index.ts';
 import { startRun } from './run.ts';
-import { buildLot } from './render/lot.ts';
+import { buildLot, type LotArt } from './render/lot.ts';
 import { drawScene } from './render/scene.ts';
 import { drawTelemetry } from './render/telemetry.ts';
 import { createView, recordTick, type View } from './render/view.ts';
 import { analysisHtml, driftTableHtml } from './ui/drifts.ts';
+import { carHud, rpmLegend } from './ui/hud-car.ts';
 
 function byId<T extends HTMLElement>(id: string, type: new () => T): T {
   const el = document.getElementById(id);
@@ -26,6 +27,7 @@ function context2d(cv: HTMLCanvasElement): CanvasRenderingContext2D {
 const cv = byId('cv', HTMLCanvasElement), tc = byId('tc', HTMLCanvasElement), sk = byId('sk', HTMLInputElement);
 const skv = byId('skv', HTMLElement), pst = byId('pst', HTMLElement), msg = byId('msg', HTMLElement);
 const dt = byId('dt', HTMLTableElement), an = byId('an', HTMLElement);
+const carEl = byId('car', HTMLElement), rpml = byId('rpml', HTMLElement);
 const c = context2d(cv), t2 = context2d(tc);
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 
@@ -35,7 +37,8 @@ const cars = createCarRegistry(Object.entries(carFiles).map(([file, json]) => lo
 let carId = cars.has('s15-drift') ? 's15-drift' : cars.list[0]!.id;
 const skill = () => Math.min(1, Math.max(0, Number(sk.value) || 0));
 let params = createSimParams(cars.get(carId), skill());
-const lot = buildLot((w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }), params.lot);
+const makeCanvas = (w: number, h: number) => Object.assign(document.createElement('canvas'), { width: w, height: h });
+let lot: LotArt = buildLot(makeCanvas, params.lot);
 const seed = () => crypto.getRandomValues(new Uint32Array(1))[0]!;
 
 let state: SimState<CarState>, prev: CarState, view: View, acc = 0, alpha = 0, paused = false;
@@ -50,6 +53,10 @@ function renderDrifts(drifts: readonly DriftRecord[]): void {
 /** v24 reset(): new car and empty histories; the skill setting and the chosen car are kept. */
 function reset(): void {
   ({ state, params } = startRun({ seed: seed(), skill: skill(), car: carId }, cars));
+  // The lot art must match the run's lot settings, whichever car started the run.
+  if (params.lot !== lot.lot) lot = buildLot(makeCanvas, params.lot);
+  carEl.textContent = carHud(params.car).label;
+  rpml.textContent = rpmLegend(params.car);
   prev = state.car;
   view = createView(seed());
   acc = 0;
@@ -117,7 +124,7 @@ function loop(now: number): void {
     }
   }
   drawScene(c, { car: blended(prev, state.car, alpha), params, view, lot, paused, dt: Math.min(0.033, Math.max(0, frame)) });
-  drawTelemetry(t2, view, state.car.tt, darkQuery.matches);
+  drawTelemetry(t2, view, state.car.tt, darkQuery.matches, carHud(params.car).rpmScale);
   if (state.car.drifts !== shownDrifts) renderDrifts(state.car.drifts);
   requestAnimationFrame(loop);
 }
