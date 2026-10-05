@@ -17,6 +17,8 @@ export interface KeyEventLike {
 export interface KeyboardOptions {
   /** P key. Pause is not an input (a paused game does not tick); the app owns it. */
   onPause?: () => void;
+  /** C key: switch car and restart the run (S002-T6). Not an input either; the app ignores it while paused. */
+  onCarSwitch?: () => void;
 }
 
 type Held = 'throttle' | 'brake' | 'left' | 'right';
@@ -39,6 +41,11 @@ export class KeyboardDevice implements InputDevice {
   private readonly onKeyDown = (e: KeyEventLike) => {
     if (e.code === 'KeyP') {
       if (!e.repeat) this.opts.onPause?.();
+      e.preventDefault();
+      return;
+    }
+    if (e.code === 'KeyC') {
+      if (!e.repeat) this.opts.onCarSwitch?.();
       e.preventDefault();
       return;
     }
