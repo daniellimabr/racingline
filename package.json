@@ -11,6 +11,7 @@
     "coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "traces": "node tools/v24-traces.mjs",
+    "tracks": "node tools/tracks/convert-track.mjs interlagos",
     "scan":"node tools/scan-secrets.mjs --all",
     "serve": "python -m http.server 8000 --bind 127.0.0.1 --directory prototype"
   },
