@@ -18,13 +18,14 @@ export interface InputLog {
   version: typeof INPUT_LOG_VERSION;
   seed: number; // uint32, seeds the sim PRNG (nothing draws from it since S002-T10)
   car: string; // car params id, e.g. "s15-drift"
+  track?: string; // track id, e.g. "interlagos"; absent means the test lot (S003-T5, still version 2)
   tickSeconds: number; // always 1/60
   subSteps: number; // always 10
   frames: InputFrame[];
 }
 
 /** Version 1 input log as the v24 reference traces embed it: version 1 plus the removed skill setting. */
-export interface V24InputLog extends Omit<InputLog, 'version'> {
+export interface V24InputLog extends Omit<InputLog, 'version' | 'track'> {
   version: typeof V24_INPUT_LOG_VERSION;
   skill: number; // 0..1 (v24 "Experiência" slider)
 }
@@ -55,11 +56,12 @@ export function checkInputLog(c: Checker, v: unknown, path: string, v24 = false)
     c.fail(`${path}.version`, V1_GONE); // one clear reason instead of a list of field errors
     return -1;
   }
-  c.keys(v, path, v24 ? V24_LOG_KEYS : LOG_KEYS);
+  c.keys(v, path, v24 ? V24_LOG_KEYS : LOG_KEYS, v24 ? [] : ['track']);
   if (has('version')) c.equals(v['version'], v24 ? V24_INPUT_LOG_VERSION : INPUT_LOG_VERSION, `${path}.version`, 'version');
   if (has('seed')) c.number(v['seed'], `${path}.seed`, { min: 0, max: UINT32_MAX, integer: true });
   if (v24 && has('skill')) c.number(v['skill'], `${path}.skill`, { min: 0, max: 1 });
   if (has('car')) c.string(v['car'], `${path}.car`);
+  if (!v24 && has('track')) c.string(v['track'], `${path}.track`);
   if (has('tickSeconds') && c.number(v['tickSeconds'], `${path}.tickSeconds`)) {
     c.equals(v['tickSeconds'], TICK_SECONDS, `${path}.tickSeconds`, 'tick length');
   }

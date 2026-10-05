@@ -1,14 +1,17 @@
 // S003-AC-11: on a track, each axle reads the grip and drag of the surface under it from the track file.
 // On grass versus tarmac at the same speed and steering, grip is lower and drag higher by exactly the
-// values in the file. Back End's surface lookup (T5) is not merged yet, so these tests use a stand-in with
-// the agreed shape (docs/sprints/SPRINT-003/mailbox/physics-dev-to-back-end-surface-lookup.md).
+// values in the file. Unit tests use stand-in lookups with the agreed shape; the Interlagos tests use
+// Back End's real surfaceAt (docs/sprints/SPRINT-003/mailbox/physics-dev-to-back-end-surface-lookup.md).
 import { describe, expect, it } from 'vitest';
-import { createState, replay } from '../../src/core/sim.ts';
-import { hashState } from '../../src/core/hash.ts';
+import { createCarRegistry } from '../../src/core/car-registry.ts';
+import { replay, step } from '../../src/core/sim.ts';
 import type { Track } from '../../src/data/track.ts';
 import { carStep, createCar, createSimParams, phys, TEST_LOT, type CarState, type SimParams } from '../../src/sim/index.ts';
 import { lotSurface, trackSurface, type AxleSurface, type SurfaceAt } from '../../src/sim/surface.ts';
+import { startRun } from '../../src/run.ts';
 import { TRACKS } from '../../src/tracks/index.ts';
+import { surfaceAt } from '../../src/tracks/surface-at.ts';
+import { autopilot } from './autopilot.ts';
 import { gt3, idle, KMH, s15 } from './gt3-helpers.ts';
 
 const track: Track = TRACKS[0]!;
@@ -81,29 +84,47 @@ describe('surface under each axle on a track', () => {
   });
 });
 
-describe('a car on a track', () => {
-  const onTrack = (at?: SurfaceAt): SimParams => ({ ...createSimParams(gt3()), track, ...(at ? { surfaceAt: at } : {}) });
-  const start = (p: SimParams) => createState(1, { ...createCar(p), x: track.spawn.x, y: track.spawn.y, h: track.spawn.h, vx: 200 * KMH, v: 200 * KMH, gear: 4, rpm: 7000 });
-  const coast = Array.from({ length: 60 }, () => idle);
+describe('a car on Interlagos through the real run setup', () => {
+  const cars = createCarRegistry([gt3(), s15()]);
+  const coast = Array.from({ length: 30 }, () => idle);
+  /** GT3 run from the spawn, moved `right` m to the driver's right, coasting at 200 km/h. */
+  function coastFrom(right: number): { car: CarState; surfaces: string[] } {
+    const run = startRun({ seed: 1, car: 'gt3', track: track.id }, cars);
+    const c0 = run.state.car, x = c0.x - Math.sin(c0.h) * right, y = c0.y + Math.cos(c0.h) * right;
+    let st = { ...run.state, car: { ...c0, x, y, vx: 200 * KMH, v: 200 * KMH, gear: 4, rpm: 7000 } };
+    const surfaces: string[] = [];
+    for (const f of coast) {
+      st = step(st, f, run.params, carStep);
+      surfaces.push(surfaceAt(track, st.car.x, st.car.y));
+    }
+    return { car: st.car, surfaces };
+  }
 
-  it('slows faster on grass than on tarmac, and the grass marks the car off the track', () => {
-    const g = replay(coast, start(onTrack(everywhere('grass'))), onTrack(everywhere('grass')), carStep).state.car;
-    const t = replay(coast, start(onTrack(everywhere(track.road))), onTrack(everywhere(track.road)), carStep).state.car;
-    expect(g.v).toBeLessThan(t.v);
-    expect(g.off).toBe(true);
-    expect(t.off).toBe(false);
+  it('the run settings carry the real surface lookup', () => {
+    expect(startRun({ seed: 1, car: 'gt3', track: track.id }, cars).params.surfaceAt).toBe(surfaceAt);
+    expect(startRun({ seed: 1, car: 'gt3' }, cars).params.surfaceAt).toBeUndefined();
   });
 
-  it('the same input gives exactly the same replay', () => {
-    const at: SurfaceAt = (_t, x) => (Math.floor(x / 5) % 2 === 0 ? 'grass' : 'kerb');
-    const p = onTrack(at), log = Array.from({ length: 240 }, (_, i) => ({ ...idle, throttle: i < 120 ? 1 : 0, left: i % 50 < 20 ? 1 : 0 }));
-    const a = replay(log, start(p), p, carStep, true), b = replay(log, start(p), p, carStep, true);
-    expect(b.hashes).toEqual(a.hashes);
-    expect(hashState(b.state)).toBe(hashState(a.state));
+  it('on the grass beside the start straight the car slows faster than on the road, and counts as off', () => {
+    const road = coastFrom(0), grassRun = coastFrom(25);
+    expect(new Set(road.surfaces)).toEqual(new Set([track.road]));
+    expect(new Set(grassRun.surfaces)).toEqual(new Set(['grass']));
+    expect(grassRun.car.v).toBeLessThan(road.car.v - 1);
+    expect(grassRun.car.off).toBe(true);
+    expect(road.car.off).toBe(false);
   });
+
+  it('a full lap completes with surfaces on, and the same input gives exactly the same replay', () => {
+    const run = startRun({ seed: 11, car: 's15-drift', track: track.id }, cars);
+    const frames = autopilot(run, track, 60 * 520, 20);
+    const a = replay(frames, run.state, run.params, carStep);
+    expect(a.state.car.lap!.last).not.toBeNull();
+    const part = frames.slice(0, 1800);
+    expect(replay(part, run.state, run.params, carStep, true).hashes).toEqual(replay(part, run.state, run.params, carStep, true).hashes);
+  }, 60_000);
 
   it('a track without a surface lookup stops with a clear error', () => {
-    const p = onTrack();
-    expect(() => carStep(start(p).car, idle, p, { dt: 1 / 60, substeps: 10 })).toThrow(/surface lookup/);
+    const p: SimParams = { ...createSimParams(gt3()), track };
+    expect(() => carStep(createCar(p), idle, p, { dt: 1 / 60, substeps: 10 })).toThrow(/surface lookup/);
   });
 });

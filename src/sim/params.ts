@@ -2,8 +2,8 @@
 // run settings (lot). Each field: unit · v24 source · confidence. "spec" = real S15 figure,
 // "tuned" = Daniel tuned it by feel in v24 (keep unless he decides otherwise), "model" = model shape.
 import { DataError } from '../data/check.ts';
-import { parseCarParams, type CarBase, type CarParamsSchema, type ParamsOf } from '../data/car-params.ts';
 import type { Track } from '../data/track.ts';
+import { parseCarParams, type CarBase, type CarParamsSchema, type ParamsOf } from '../data/car-params.ts';
 import type { SurfaceAt } from './surface.ts';
 
 const num = (min: number, max: number, integer = false) =>
@@ -137,13 +137,12 @@ export const TEST_LOT: Lot = Object.freeze({
 /** Everything the car step reads besides state and input (the skill setting was removed in S002-T10). */
 export interface SimParams {
   car: CarParams;
-  lot: Lot;
-  /** The circuit, when driving one (absent on the lot). */
-  track?: Track;
-  /** Surface lookup for `track` (Back End, S003-T5); required whenever `track` is set. */
+  lot: Lot; // on a track only its scale (px per m) is used for drawing
+  track?: Track; // the checked track; absent on the test lot (S003-T5)
+  /** Surface lookup for `track` (src/tracks/surface-at.ts); required whenever `track` is set (S003-T6). */
   surfaceAt?: SurfaceAt;
 }
 
-export function createSimParams(car: CarParams, lot: Lot = TEST_LOT): SimParams {
-  return { car, lot };
+export function createSimParams(car: CarParams, lot: Lot = TEST_LOT, track?: Track): SimParams {
+  return track === undefined ? { car, lot } : { car, lot, track };
 }

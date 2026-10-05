@@ -3,8 +3,10 @@
 // The v24 steering wobble was removed in S002-T10 with the skill setting.
 import type { InputFrame } from '../core/input-frame.ts';
 import type { CarStep } from '../core/sim.ts';
+import type { Track } from '../data/track.ts';
 import { trackDrift, DRIFT_BETA } from './drift.ts';
 import { engine, manualShift } from './engine.ts';
+import { allWheelsOff, createLapState, lapStep } from './laps.ts';
 import { phys } from './physics.ts';
 import type { SimParams } from './params.ts';
 import type { CarState } from './state.ts';
@@ -59,6 +61,10 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   }
 }
 
+function noLookup(tr: Track): never {
+  throw new Error(`Track ${tr.id}: the run settings have no surface lookup (surfaceAt)`);
+}
+
 /** Pure: works on a copy of the car and returns it; car, input and params are never mutated. */
 export const carStep: CarStep<CarState, SimParams> = (car, input, p, ctx) => {
   const s: CarState = { ...car }; // nested drift data is replaced, never edited (drift.ts)
@@ -67,16 +73,15 @@ export const carStep: CarStep<CarState, SimParams> = (car, input, p, ctx) => {
   if (input.shiftUp) manualShift(c, s, 1);
   if (input.shiftDown) manualShift(c, s, -1);
   if (input.toggleAuto) s.auto = !s.auto;
-  const tr = p.track, at = p.surfaceAt;
-  if (tr && !at) throw new Error(`Track ${tr.id}: the run settings have no surface lookup (surfaceAt)`);
+  const tr = p.track;
   // Surfaces are read once per tick from the position at its start, as v24 held `off` across sub-steps.
-  sim(s, dt, input, p, ctx.substeps, tr && at ? trackSurface(tr, at, c, s) : lotSurface(p.lot, s.off));
+  sim(s, dt, input, p, ctx.substeps, tr ? trackSurface(tr, p.surfaceAt ?? noLookup(tr), c, s) : lotSurface(p.lot, s.off));
   s.tt += dt;
-  if (tr && at) s.off = at(tr, s.x, s.y) !== tr.road;
-  else {
-    const L = p.lot, px = s.x * L.scale, py = s.y * L.scale;
-    s.off = px < L.x0 || px > L.x1 || py < L.y0 || py > L.y1;
-  }
+  // On a track, off means all four wheels off the road (the same test as the off-track rule; read by the
+  // drift tracker and the HUD). Grip and drag never read it there: they come from the axle surfaces above.
+  const L = p.lot, px = s.x * L.scale, py = s.y * L.scale;
+  s.off = tr ? allWheelsOff(tr, s, c) : px < L.x0 || px > L.x1 || py < L.y0 || py > L.y1;
   trackDrift(s, dt);
+  if (p.track) s.lap = lapStep(car.lap ?? createLapState(p.track), car, s, p.track, c);
   return s;
 };

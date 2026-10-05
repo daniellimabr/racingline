@@ -2,6 +2,7 @@
   "id": "s15-drift",
   "name": "S15 Drift",
   "mass": 1335,
+  "trackWidth": 1.48,
   "wheelbase": 2.525,
   "frontAxleFraction": 0.45,
   "rearAxleFraction": 0.55,
