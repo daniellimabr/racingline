@@ -4,9 +4,22 @@
   "type": "module",
   "description": "RacingLine: web racing game with a player-drawn racing line.",
   "scripts": {
-    "test": "node --test",
-    "scan": "node tools/scan-secrets.mjs --all",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "traces": "node tools/v24-traces.mjs",
+    "scan":"node tools/scan-secrets.mjs --all",
     "serve": "python -m http.server 8000 --bind 127.0.0.1 --directory prototype"
   },
-  "engines": { "node": ">=20" }
+  "engines": { "node": ">=20.19" },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "@vitest/coverage-v8": "5.0.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "5.0.3"
+  }
 }
