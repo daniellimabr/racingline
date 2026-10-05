@@ -19,8 +19,9 @@ describe('GT3 lateral grip vs speed (S002-AC-07)', () => {
   it('is higher at 200 km/h than at 80 km/h, near the ADR-004 values', () => {
     const g80 = maxLateralG(gt3(), 80), g200 = maxLateralG(gt3(), 200);
     expect(g200).toBeGreaterThan(g80 * 1.25);
-    expect(g80).toBeCloseTo(1.65, 1);
-    expect(g200).toBeCloseTo(2.21, 1);
+    // ADR-004 amended 2026-10-05: the S003 rear cornering margin (rearCornerGrip 1.05) raised 1.65/2.21 g.
+    expect(g80).toBeCloseTo(1.7, 1);
+    expect(g200).toBeCloseTo(2.29, 1);
   });
 
   it('stays flat for the S15, which has no aero', () => {
