@@ -16,11 +16,11 @@ const reasons = (v: unknown): string => {
 };
 
 describe('S15 car params (S001-AC-09)', () => {
-  it('loads s15-drift.json with the v24 values', () => {
+  it('loads s15-drift.json with its current values (2nd gear 2.1 since S002-T5, v24 had 1.902)', () => {
     const car = loadCarParams(s15, 's15-drift.json');
     expect(car.id).toBe('s15-drift');
     expect(car.mass).toBe(1335);
-    expect(car.gears).toEqual([3.321, 1.902, 1.308, 1.0, 0.759, 0.646]);
+    expect(car.gears).toEqual([3.321, 2.1, 1.308, 1.0, 0.759, 0.646]);
     expect(car.maxSteer).toBe((60 * Math.PI) / 180);
     expect(car.la).toBe(0.45 * 2.525);
     expect(car.lb).toBe(0.55 * 2.525);
