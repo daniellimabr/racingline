@@ -1,5 +1,5 @@
 // S002-AC-10 (part 2): a run recorded with car X, saved as an input log and replayed, uses car X
-// and reproduces the same state hash. The test-only second car stands in for the GT3 until gt3.json lands.
+// and reproduces the same state hash, with the real GT3 car file (S002-T4).
 import { describe, expect, test } from 'vitest';
 import { step } from '../../src/core/sim.ts';
 import { hashState } from '../../src/core/hash.ts';
@@ -8,10 +8,10 @@ import { INPUT_LOG_VERSION, parseInputLog, SUB_STEPS, TICK_SECONDS, type InputLo
 import { replayRun, startRun } from '../../src/run.ts';
 import { carStep, loadCarParams } from '../../src/sim/index.ts';
 import s15 from '../../src/cars/s15-drift.json';
-import { secondCar } from '../cars/second-car.ts';
+import gt3 from '../../src/cars/gt3.json';
 import { scriptedLog } from './helpers.ts';
 
-const cars = createCarRegistry([loadCarParams(s15, 's15-drift.json'), secondCar()]);
+const cars = createCarRegistry([loadCarParams(s15, 's15-drift.json'), loadCarParams(gt3, 'gt3.json')]);
 const frames = scriptedLog(600);
 
 /** Plays a run live, tick by tick like the game loop, and records it as a saved input log. */
@@ -27,9 +27,9 @@ function record(car: string): { log: InputLog; hash: string } {
 }
 
 describe('replay with the recorded car (S002-AC-10)', () => {
-  test('replaying a second-car run reproduces the live state hash', () => {
-    const { log, hash } = record('test-car-b');
-    expect(log.car).toBe('test-car-b');
+  test('replaying a GT3 run reproduces the live state hash', () => {
+    const { log, hash } = record('gt3');
+    expect(log.car).toBe('gt3');
     const r = replayRun(log, cars, true);
     expect(r.state.tick).toBe(600);
     expect(hashState(r.state)).toBe(hash);
@@ -38,7 +38,7 @@ describe('replay with the recorded car (S002-AC-10)', () => {
 
   test('replaying an S15 run reproduces its hash, and the car id changes the result', () => {
     const a = record('s15-drift');
-    const b = record('test-car-b');
+    const b = record('gt3');
     expect(hashState(replayRun(a.log, cars).state)).toBe(a.hash);
     expect(a.hash).not.toBe(b.hash);
     expect(hashState(replayRun({ ...b.log, car: 's15-drift' }, cars).state)).toBe(a.hash);
