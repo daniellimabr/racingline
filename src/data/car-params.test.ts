@@ -2,10 +2,11 @@
 // Physics Dev adds the S15 field list and cars/params.test.ts on top of this validator in T4.
 import { describe, expect, it } from 'vitest';
 import { DataError } from './check.ts';
-import { parseCarParams, validateCarParams, type CarParamsSchema, type ParamsOf } from './car-params.ts';
+import { CAR_BASE_FIELDS, parseCarParams, validateCarParams, type CarBase, type CarParamsSchema, type ParamsOf } from './car-params.ts';
 
 const SAMPLE = {
   id: { type: 'string' },
+  name: { type: 'string' },
   mass: { type: 'number', min: 1 },
   gears: { type: 'number', min: 1, max: 8, integer: true },
   grip: { type: 'number', min: 0, max: 2 },
@@ -14,12 +15,16 @@ const SAMPLE = {
 
 const params = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   id: 'sample',
+  name: 'Sample',
   mass: 1240,
   gears: 6,
   grip: 1,
   drag: -0.3,
   ...over,
 });
+
+/** What the validator adds to every car file that leaves the aero fields out (S002-AC-02). */
+const NO_AERO = { downforceArea: 0, dragArea: 0, aeroBalanceFront: 0, airDensity: 1.225 };
 
 const errorsOf = (v: unknown) => {
   const r = validateCarParams(SAMPLE, v);
@@ -39,7 +44,7 @@ describe('validateCarParams (S001-AC-09 generic part)', () => {
   });
 
   it('round-trips through JSON (write -> read -> equal)', () => {
-    const original = params();
+    const original = params({ downforceArea: 2, dragArea: 0.8, aeroBalanceFront: 0.4, airDensity: 1.2 });
     expect(parseCarParams(SAMPLE, JSON.parse(JSON.stringify(original)), 'sample.json')).toEqual(original);
   });
 
@@ -84,5 +89,38 @@ describe('validateCarParams (S001-AC-09 generic part)', () => {
     expect(() => parseCarParams(SAMPLE, params({ grip: 3 }), 'sample.json')).toThrowError(
       /sample\.json[\s\S]*\$\.grip: expected a value in 0\.\.2, got 3/,
     );
+  });
+
+  it('fills the base fields left out with their defaults, without changing the input', () => {
+    const input = params();
+    const r = validateCarParams(SAMPLE, input);
+    expect(r.ok && r.value).toEqual({ ...params(), ...NO_AERO });
+    expect(input).toEqual(params());
+    if (r.ok) {
+      const typed: CarBase = r.value;
+      expect(typed.downforceArea + typed.dragArea + typed.aeroBalanceFront).toBe(0);
+    }
+  });
+
+  it('lets a caller schema declare its own optional number with a default', () => {
+    const withDefault = { ...SAMPLE, ballast: { type: 'number', min: 0, default: 25 } } as const satisfies CarParamsSchema;
+    const r = validateCarParams(withDefault, params());
+    expect(r.ok && r.value.ballast).toBe(25);
+    expect(validateCarParams(withDefault, params({ ballast: 10 })).ok && 10).toBe(10);
+    expect(validateCarParams(withDefault, params({ ballast: -1 })).ok).toBe(false);
+  });
+
+  it('every number default lies inside its own range', () => {
+    for (const [key, spec] of Object.entries(CAR_BASE_FIELDS)) {
+      if (spec.type !== 'number' || !('default' in spec)) continue;
+      expect(spec.default, key).toBeGreaterThanOrEqual(spec.min);
+      expect(spec.default, key).toBeLessThanOrEqual(spec.max);
+    }
+  });
+
+  it('base fields win over a caller field with the same name (the id keeps its pattern)', () => {
+    expect(errorsOf(params({ id: 'Sample Car' }))).toEqual([
+      { path: '$.id', reason: 'expected lowercase letters, digits and single dashes (like "s15-drift"), got "Sample Car"' },
+    ]);
   });
 });
