@@ -6,9 +6,8 @@
 //
 // Root cause (no wobble involved): the S15 is exactly neutral at its grip limit (same tyre curve and grip
 // on both axles, static front load 0.55 = CG lever share 0.55), so once the front saturates the rear sits
-// at its own peak and nothing damps the yaw; the damping that is left falls with speed. The S15 case is
-// marked as an expected failure until Daniel picks a fix (it changes how the car feels); when a fix
-// lands this test starts failing, and `.fails` must be removed.
+// at its own peak and nothing damps the yaw; the damping that is left falls with speed. The GT3 must
+// settle; the S15 weave is characterized so a change to it shows up here.
 import { describe, expect, it } from 'vitest';
 import { createState, step } from '../../src/core/sim.ts';
 import { carStep, createCar, type CarParams } from '../../src/sim/index.ts';
@@ -39,9 +38,24 @@ function expectSettled(r: number[]): void {
   expect(Math.max(...from2s) - Math.min(...from2s), 'yaw rate swing 2-4 s, deg/s').toBeLessThan(8);
 }
 
+/** Seconds between the first two local maxima of the yaw rate (one weave period). */
+function period(r: number[]): number {
+  const peaks = r.flatMap((x, i) => (i > 0 && i < r.length - 1 && x > r[i - 1]! && x >= r[i + 1]! ? [i] : []));
+  if (peaks.length < 2) throw new Error('fewer than two yaw-rate peaks');
+  return (peaks[1]! - peaks[0]!) / TICKS_PER_S;
+}
+
 describe('yaw rate settles at 200 km/h with full lock (S002-T10)', () => {
   it('GT3 (control)', () => expectSettled(yawAtFullLock(gt3())));
 
-  // Today: peak 22.8 deg/s, reverses to -3.8 deg/s, swing 17.8 deg/s between 2 and 4 s.
-  it.fails('S15 (known weave, waiting for Daniel to choose a fix)', () => expectSettled(yawAtFullLock(s15())));
+  // Daniel 2026-10-05 chose to keep this: neutral S15 at the limit, see SPRINT-PLAN-002 T10.
+  it('S15 keeps its weave (characterization: reverses to -3.8 deg/s, swing 17.8 deg/s, period 1.8 s)', () => {
+    const r = yawAtFullLock(s15()), from2s = r.slice(2 * TICKS_PER_S);
+    const swing = Math.max(...from2s) - Math.min(...from2s);
+    expect(swing).toBeGreaterThan(12);
+    expect(swing).toBeLessThan(24);
+    expect(Math.min(...r.slice(1 * TICKS_PER_S))).toBeLessThan(0); // the yaw rate briefly reverses
+    expect(period(r)).toBeGreaterThan(1.5);
+    expect(period(r)).toBeLessThan(2.1);
+  });
 });
