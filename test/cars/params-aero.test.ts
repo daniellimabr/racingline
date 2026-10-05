@@ -1,8 +1,9 @@
 // S002-AC-01 / S002-AC-02: car files carry an id, a display name and optional aero fields.
 // The GT3 values below are a test fixture only; the real numbers come from ADR-004 in T4 (gt3.json).
 import { describe, expect, it } from 'vitest';
+import { parseCarParams } from '../../src/data/car-params.ts';
 import { DataError } from '../../src/data/check.ts';
-import { loadCarParams } from '../../src/sim/index.ts';
+import { CAR_SCHEMA, loadCarParams } from '../../src/sim/index.ts';
 import s15 from '../../src/cars/s15-drift.json';
 
 const GT3_LIKE: Record<string, unknown> = {
@@ -20,6 +21,9 @@ const without = (key: string, src: Record<string, unknown> = GT3_LIKE): Record<s
   delete copy[key];
   return copy;
 };
+// Typed read of the base fields; loadCarParams returns them at runtime, and its CarParams type gains
+// them when Physics Dev adds CarBase to it in T4 (src/sim is out of scope for T3).
+const typed = (v: unknown) => parseCarParams(CAR_SCHEMA, v, 'car.json');
 const reasons = (v: unknown): string => {
   try {
     loadCarParams(v, 'car.json');
@@ -58,7 +62,8 @@ describe('car identity', () => {
 describe('aero fields (S002-AC-02)', () => {
   it('s15-drift.json has no aero fields and loads with zero aero', () => {
     for (const k of ['downforceArea', 'dragArea', 'aeroBalanceFront', 'airDensity']) expect(Object.hasOwn(s15, k)).toBe(false);
-    const car = loadCarParams(s15, 's15-drift.json');
+    expect(loadCarParams(s15, 's15-drift.json')).toMatchObject({ downforceArea: 0, dragArea: 0, aeroBalanceFront: 0, airDensity: 1.225 });
+    const car = typed(s15);
     expect(car.downforceArea).toBe(0);
     expect(car.dragArea).toBe(0);
     expect(car.aeroBalanceFront).toBe(0);
@@ -104,8 +109,8 @@ describe('aero fields (S002-AC-01)', () => {
   });
 
   it('accepts aeroBalanceFront at 0 and 1', () => {
-    expect(loadCarParams(gt3({ aeroBalanceFront: 0 }), 'car.json').aeroBalanceFront).toBe(0);
-    expect(loadCarParams(gt3({ aeroBalanceFront: 1 }), 'car.json').aeroBalanceFront).toBe(1);
+    expect(typed(gt3({ aeroBalanceFront: 0 })).aeroBalanceFront).toBe(0);
+    expect(typed(gt3({ aeroBalanceFront: 1 })).aeroBalanceFront).toBe(1);
   });
 
   it('rejects a wrong-type aero value', () => {
@@ -115,7 +120,7 @@ describe('aero fields (S002-AC-01)', () => {
   it('requires aeroBalanceFront when the car has downforce', () => {
     expect(reasons(without('aeroBalanceFront'))).toContain('$.aeroBalanceFront: required when downforceArea is above 0');
     const noDownforce = without('aeroBalanceFront', gt3({ downforceArea: 0 }));
-    expect(loadCarParams(noDownforce, 'car.json').aeroBalanceFront).toBe(0);
+    expect(typed(noDownforce).aeroBalanceFront).toBe(0);
   });
 
   it('lists every bad aero field in one error', () => {
