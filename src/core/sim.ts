@@ -2,7 +2,7 @@
 // Physics-agnostic: the car simulation plugs in as a CarStep (Physics Dev, S001-T4).
 import type { InputFrame } from './input-frame.ts';
 import { hashState } from './hash.ts';
-import { next, seedState } from './rng.ts';
+import { seedState } from './rng.ts';
 
 export const TICK = 1 / 60; // seconds per sim tick
 export const SUBSTEPS = 10; // physics sub-steps per tick (v24 sim(): n = 10)
@@ -11,14 +11,13 @@ export const SUBSTEPS = 10; // physics sub-steps per tick (v24 sim(): n = 10)
 export interface SimState<C = unknown> {
   v: 1;
   tick: number;
-  rng: number; // mulberry32 uint32 state
+  rng: number; // mulberry32 uint32 state; nothing draws from it since the wobble was removed (S002-T10)
   car: C;
 }
 
 export interface TickContext {
   dt: number; // TICK
   substeps: number; // SUBSTEPS; the car sim runs its own sub-step loop, as v24 sim() does
-  wobble: number; // one rng draw in [0, 1) taken this tick before the car step (v24 line 199)
 }
 
 /** Must be pure: return a new car, never mutate `car`, `input` or `params`. */
@@ -28,11 +27,10 @@ export function createState<C>(seed: number, car: C): SimState<C> {
   return { v: 1, tick: 0, rng: seedState(seed), car };
 }
 
-/** Advances one tick: draw the wobble value, then run the car step. Returns a new state. */
+/** Advances one tick: runs the car step. Returns a new state. */
 export function step<C, P>(state: SimState<C>, input: InputFrame, params: P, carStep: CarStep<C, P>): SimState<C> {
-  const draw = next(state.rng);
-  const car = carStep(state.car, input, params, { dt: TICK, substeps: SUBSTEPS, wobble: draw.value });
-  return { v: 1, tick: state.tick + 1, rng: draw.state, car };
+  const car = carStep(state.car, input, params, { dt: TICK, substeps: SUBSTEPS });
+  return { v: 1, tick: state.tick + 1, rng: state.rng, car };
 }
 
 export interface ReplayResult<C> {

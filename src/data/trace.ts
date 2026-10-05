@@ -2,7 +2,7 @@
 // that the TS port must reproduce within per-signal tolerances (S001-AC-06).
 // Layout agreed in docs/sprints/SPRINT-001/mailbox/physics-dev-to-database-trace-format.md.
 import { Checker, orThrow, type Result } from './check.ts';
-import { checkInputLog, type InputLog } from './input-log.ts';
+import { checkInputLog, type V24InputLog } from './input-log.ts';
 
 export const TRACE_VERSION = 1;
 export const TRACE_SOURCE = 'prototype-v24';
@@ -17,7 +17,7 @@ export interface ReferenceTrace {
   version: typeof TRACE_VERSION;
   source: typeof TRACE_SOURCE;
   scenario: string; // e.g. "straight-accel", "drift-countersteer"
-  inputLog: InputLog; // the exact inputs that produced the samples
+  inputLog: V24InputLog; // the exact v24 inputs that produced the samples (input log version 1)
   stride: number; // a sample every `stride` ticks
   samples: TraceSample[];
 }
@@ -60,7 +60,7 @@ export function validateReferenceTrace(v: unknown): Result<ReferenceTrace> {
   if (has('version')) c.equals(v['version'], TRACE_VERSION, '$.version', 'version');
   if (has('source')) c.equals(v['source'], TRACE_SOURCE, '$.source', 'source');
   if (has('scenario')) c.string(v['scenario'], '$.scenario');
-  const frameCount = has('inputLog') ? checkInputLog(c, v['inputLog'], '$.inputLog') : -1;
+  const frameCount = has('inputLog') ? checkInputLog(c, v['inputLog'], '$.inputLog', true) : -1;
   let stride = 0;
   if (has('stride') && c.number(v['stride'], '$.stride', { min: 1, integer: true })) stride = v['stride'];
   if (has('samples')) checkSamples(c, v['samples'], '$.samples', stride, frameCount);

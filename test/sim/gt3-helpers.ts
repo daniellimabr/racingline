@@ -10,7 +10,7 @@ export const s15 = (): CarParams => loadCarParams(s15Json, 's15-drift.json');
 
 /** TEST_LOT with bounds far away; the car starts in the middle. */
 export const OPEN_LOT: Lot = Object.freeze({ ...TEST_LOT, x0: -1e7, y0: -1e7, x1: 1e7, y1: 1e7, startX: 0, startY: 0 });
-export const open = (car: CarParams, skill = 0.4): SimParams => createSimParams(car, skill, OPEN_LOT);
+export const open = (car: CarParams): SimParams => createSimParams(car, OPEN_LOT);
 
 export const KMH = 1 / 3.6;
 export const idle: InputFrame = { throttle: 0, brake: 0, left: 0, right: 0, shiftUp: false, shiftDown: false, toggleAuto: false };

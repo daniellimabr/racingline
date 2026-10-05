@@ -35,7 +35,7 @@ function recordingContext(): { ctx: CanvasRenderingContext2D; calls: [string, un
 }
 
 function drawOnce(car: CarParams): [string, unknown[]][] {
-  const params = createSimParams(car, 0.4);
+  const params = createSimParams(car);
   const { ctx, calls } = recordingContext();
   const factory: CanvasFactory = (width, height) => ({ width, height, getContext: () => ctx });
   const lot = buildLot(factory, params.lot);
@@ -67,7 +67,7 @@ describe.each(CARS)('HUD for %s', (id, car) => {
   it('starts the tacho red zone at the car redline', () => {
     const calls = drawOnce(car);
     const tach = calls.filter(([k, a]) => k === 'arc' && a[2] === 48).map(([, a]) => a as number[]);
-    const h = createCar(createSimParams(car, 0.4)).h;
+    const h = createCar(createSimParams(car)).h;
     const fr = (car.redlineRpm - car.idleRpm) / (car.cutRpm - car.idleRpm);
     expect(tach[1]![3]).toBeCloseTo(h - 1.05 + 2.1 * fr, 9);
     expect(id).toBeTruthy();

@@ -3,16 +3,15 @@
 // The game is the source of truth (Daniel 2026-10-05), not prototype v24. A deliberate behavior change
 // regenerates the file in the same commit and adds a one-line reason:
 //   UPDATE_GOLDEN="<one-line reason>" npx vitest run test/sim/golden-replay.test.ts
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { hashState } from '../../src/core/hash.ts';
 import { createCarRegistry } from '../../src/core/car-registry.ts';
-import { parseReferenceTrace } from '../../src/data/trace.ts';
 import { replayRun } from '../../src/run.ts';
 import { createSimParams, loadCarParams, predict } from '../../src/sim/index.ts';
 import s15 from '../../src/cars/s15-drift.json';
+import { scenarioFiles, scenarioLog } from './scenario-logs.ts';
 
-const LOGS = new URL('../fixtures/v24/', import.meta.url);
 const GOLDEN = new URL('../fixtures/golden.json', import.meta.url);
 
 interface Golden {
@@ -21,12 +20,12 @@ interface Golden {
 }
 
 const cars = createCarRegistry([loadCarParams(s15, 's15-drift.json')]);
-const files = readdirSync(LOGS).filter((f) => f.endsWith('.trace.json')).sort();
+const files = scenarioFiles();
 
 function run(file: string): { state: string; line: string } {
-  const log = parseReferenceTrace(JSON.parse(readFileSync(new URL(file, LOGS), 'utf8')), file).inputLog;
+  const log = scenarioLog(file);
   const r = replayRun(log, cars);
-  const line = predict(r.state.car, createSimParams(cars.get(log.car), log.skill));
+  const line = predict(r.state.car, createSimParams(cars.get(log.car)));
   return { state: hashState(r.state), line: hashState(line) };
 }
 

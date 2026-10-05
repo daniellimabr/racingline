@@ -4,7 +4,7 @@ import { trackDrift } from '../../src/sim/drift.ts';
 import { createCar, createSimParams, loadCarParams, type CarState } from '../../src/sim/index.ts';
 import s15 from '../../src/cars/s15-drift.json';
 
-const base = createCar(createSimParams(loadCarParams(s15, 's15-drift.json'), 0.4));
+const base = createCar(createSimParams(loadCarParams(s15, 's15-drift.json')));
 const sliding: Partial<CarState> = { v: 12, beta: 0.5, st: 0.6, t: 0.8, lim: 0.6, rpm: 6000, gear: 1, mode: 'drift' };
 
 /** Drifts for `ticks` ticks with `during`, then ends with `after`; returns the finished record list. */

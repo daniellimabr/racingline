@@ -52,7 +52,7 @@ export interface CarState {
   vx: number; vy: number; r: number; // m/s body frame, rad/s yaw rate
   v: number; beta: number; // speed, body slip angle
   t: number; b: number; st: number; // throttle 0..1, brake 0..1, steering -1..1
-  wob: number; delta: number; // steering wobble, road-wheel angle (rad)
+  delta: number; // road-wheel angle (rad)
   af: number; ar: number; axp: number; // slip angles, last longitudinal accel
   u: number; lim: number; spinR: number; wspin: boolean; lockF: boolean; // rear drive use, traction limit, wheelspin, front lock
   useF: number; useR: number; uFs: number; uRs: number; // axle grip use, raw and smoothed
@@ -71,7 +71,7 @@ export interface CarState {
 export function createCar(p: SimParams): CarState {
   return {
     x: p.lot.startX / p.lot.scale, y: p.lot.startY / p.lot.scale, h: 0, vx: 0, vy: 0, r: 0, v: 0, t: 0, b: 0, st: 0,
-    wob: 0, beta: 0, af: 0, ar: 0, delta: 0, axp: 0, u: 0, lim: 1, useF: 0, useR: 0, uFs: 0, uRs: 0, dFs: 0, dRs: 0,
+    beta: 0, af: 0, ar: 0, delta: 0, axp: 0, u: 0, lim: 1, useF: 0, useR: 0, uFs: 0, uRs: 0, dFs: 0, dRs: 0,
     pF0: 0, pR0: 0, b0: 0, dB: 0, riskF: 0, riskR: 0, lockF: false, spinR: 0, wF: 0, wR: 0, rateF: 0, rateR: 0,
     mode: '', wspin: false, off: false, tt: 0, gear: 0, auto: true, rpm: p.car.idleRpm, cut: false, shiftT: 0,
     shiftCd: 0, groundRpm: 0, cur: null, drifts: [],
