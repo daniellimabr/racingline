@@ -8,24 +8,27 @@
     "S002-T10 manual-shift (state, line): no wobble, so the car ends 0.03 m and 0.1 deg of heading away; shifts and speed unchanged.",
     "S002-T10 steady-corner (state, line): no wobble, so the car ends 0.3 m along its circle from before; speed and yaw rate unchanged.",
     "S002-T10 straight-accel (state, line): no wobble, so the car ends 0.4 m and 0.5 deg of heading away; acceleration and shifts unchanged.",
-    "S002-T10 wobble (state, line): this straight-line scenario now runs dead straight (it was 1.6 m off line from the wobble alone); the name is kept for the v24 file."
+    "S002-T10 wobble (state, line): this straight-line scenario now runs dead straight (it was 1.6 m off line from the wobble alone); the name is kept for the v24 file.",
+    "S003-T3 braking: rear brake capped at 75% of rear grip (rearBrakeMaxShare, Daniel option 1B) so braking while turning no longer spins; straight stops 3-5% longer.",
+    "S003-T3 drift-countersteer: rear cornering grip +5% (rearCornerGrip 1.05, Daniel option 2B) so a lift at the limit no longer spins; the recorded drift now runs differently.",
+    "S003-T3 steady-corner: rear cornering grip +5% (rearCornerGrip 1.05, Daniel option 2B) changes the cornering balance; the other three scenarios keep their hashes."
   ],
   "scenarios": {
     "braking": {
-      "state": "347d3bd46b7008f1",
-      "line": "902b6e688362a3a1"
+      "state": "737a5053e81b4d15",
+      "line": "e0673af6647a9ce9"
     },
     "drift-countersteer": {
-      "state": "63188bf019b2da1b",
-      "line": "e04e9d060ba5e25f"
+      "state": "97be32e312a40dcc",
+      "line": "592fc05992ce0184"
     },
     "manual-shift": {
       "state": "4e550d96a236874f",
       "line": "0aa58c7a8adadb05"
     },
     "steady-corner": {
-      "state": "cebe438d374068bc",
-      "line": "2c2506b4a2e4a543"
+      "state": "e1acb75886f0ec99",
+      "line": "b33e7b169b339a8f"
     },
     "straight-accel": {
       "state": "8c4f93751f83dc07",

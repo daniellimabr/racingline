@@ -43,6 +43,8 @@ export const CAR_SCHEMA = {
   brakeFront: num(0, 1), // front brake share · 0.7 · tuned
   brakeRear: num(0, 1), // rear brake share · 0.3 · tuned
   brakeLockMargin: num(0, 1), // share of grip a brake can use before lock · 0.98 · tuned
+  rearBrakeMaxShare: num(0, 1), // most of the rear grip the rear brake may take, like a brake balance valve · 0.75 · tuned (S003-T3, Daniel option 1B)
+  rearCornerGrip: num(0.5, 2), // rear cornering grip factor over the front, a stability margin; traction and braking unchanged · 1.05 · tuned (S003-T3, Daniel option 2B)
   lockUsage: num(0, 5), // front use shown while locked · 1.15 · tuned
   dragCoef: num(0, 0.01), // 1/m, aero drag per v^2 · 0.00036 · tuned
   rollingDecel: num(0, 5), // m/s2 when moving · 0.15 · tuned

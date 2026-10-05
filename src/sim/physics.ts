@@ -65,9 +65,10 @@ export function phys(s: CarState, dt: number, p: SimParams): void {
   const dir = s.vx >= 0 ? 1 : -1, mv = spd > 0.3;
   s.lockF = mv && c.brakeFront * D > Gf * c.brakeLockMargin;
   const fL = mv ? Math.min(c.brakeFront * D, Gf * c.brakeLockMargin) : 0;
-  const rB = mv ? Math.min(c.brakeRear * D, Gr * c.brakeLockMargin) : 0;
+  // S003: the rear brake is capped below the rear grip so cornering grip is left when weight moves forward.
+  const rB = mv ? Math.min(c.brakeRear * D, Gr * c.rearBrakeMaxShare) : 0;
   const Fxr = Fdrive - dir * rB, Fxf = -dir * fL;
-  const FfMax = Math.sqrt(Math.max(0, Gf * Gf - fL * fL)), GrL = Gr * latF, FrMax = Math.sqrt(Math.max(0, GrL * GrL - rB * rB));
+  const FfMax = Math.sqrt(Math.max(0, Gf * Gf - fL * fL)), GrL = Gr * latF * c.rearCornerGrip, FrMax = Math.sqrt(Math.max(0, GrL * GrL - rB * rB));
   const delta = steer(c, s, spd);
   s.delta = delta;
   const ebrake =
