@@ -23,23 +23,24 @@ describe('S001-AC-03 replay determinism', () => {
     expect(replay(log, createState(7, testCar()), testParams, testCarStep).hashes).toBeUndefined();
   });
 
-  test('a different seed changes the result (wobble is drawn from the seeded rng)', () => {
+  test('the seed only sets the random-number state; with no draws the car is the same (S002-T10)', () => {
     const a = replay(log, createState(1, testCar()), testParams, testCarStep);
     const b = replay(log, createState(2, testCar()), testParams, testCarStep);
     expect(hashState(a.state)).not.toBe(hashState(b.state));
+    expect(a.state.car).toEqual(b.state.car);
   });
 });
 
 describe('step', () => {
-  test('draws one rng value per tick and passes dt, substeps and wobble to carStep', () => {
+  test('passes dt and substeps to carStep and draws no random number (S002-T10: wobble removed)', () => {
     const seen: unknown[] = [];
     const s0 = createState(1, { n: 0 });
     const s1 = step(s0, log[0]!, null, (car, _i, _p, ctx) => {
       seen.push(ctx);
       return { n: car.n + 1 };
     });
-    expect(seen).toEqual([{ dt: TICK, substeps: SUBSTEPS, wobble: 0.6270739405881613 }]);
-    expect(s1).toEqual({ v: 1, tick: 1, rng: 1831565814, car: { n: 1 } });
+    expect(seen).toEqual([{ dt: TICK, substeps: SUBSTEPS }]);
+    expect(s1).toEqual({ v: 1, tick: 1, rng: s0.rng, car: { n: 1 } });
   });
 
   test('does not mutate its inputs (frozen state, input and params)', () => {

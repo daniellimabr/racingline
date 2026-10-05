@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DataError } from '../../src/data/check.ts';
 import { CAR_SCHEMA, createSimParams, loadCarParams } from '../../src/sim/index.ts';
 import s15 from '../../src/cars/s15-drift.json';
+import gt3 from '../../src/cars/gt3.json';
 
 const file = (over: Record<string, unknown> = {}): Record<string, unknown> => ({ ...s15, ...over });
 const reasons = (v: unknown): string => {
@@ -54,10 +55,18 @@ describe('S15 car params (S001-AC-09)', () => {
     expect(reasons(file({ idleRpm: 7400 }))).toContain('idleRpm');
   });
 
-  it('rejects a skill outside 0..1', () => {
+  it('has one fixed grip per car, equal to the old skill formula at the default 0.4 (S002-T10)', () => {
+    // Old: gripBase + gripPerSkill * 0.4 (S15 0.95 + 0.1*0.4, GT3 1.5 + 0.1*0.4); same doubles, so no drift.
+    expect(loadCarParams(s15, 's15-drift.json').grip).toBe(0.95 + 0.1 * 0.4);
+    expect(loadCarParams(gt3, 'gt3.json').grip).toBe(1.5 + 0.1 * 0.4);
+    for (const k of ['gripBase', 'gripPerSkill', 'wobbleAmp', 'wobbleDecay', 'wobbleGain', 'wobbleSpeed'])
+      expect(Object.keys(CAR_SCHEMA)).not.toContain(k);
+  });
+
+  it('builds sim params from the car alone (no skill setting)', () => {
     const car = loadCarParams(s15, 's15-drift.json');
-    expect(() => createSimParams(car, 1.5)).toThrow(/skill/);
-    expect(() => createSimParams(car, Number.NaN)).toThrow(/skill/);
-    expect(createSimParams(car, 1).skill).toBe(1);
+    const p = createSimParams(car);
+    expect(p.car).toBe(car);
+    expect(Object.keys(p).sort()).toEqual(['car', 'lot']);
   });
 });
