@@ -53,6 +53,17 @@ describe('validateReferenceTrace', () => {
     expect(pathsOf(trace({ version }))).toContain('$.version');
   });
 
+  // S002-T10: a trace records a v24 run, so its embedded log keeps the version 1 shape, skill included.
+  it('rejects an embedded log without skill (v24 version 1 logs must carry the skill they ran with)', () => {
+    const { skill: _skill, ...noSkill } = trace().inputLog as Record<string, unknown>;
+    expect(errorsOf(trace({ inputLog: noSkill }))).toContainEqual({ path: '$.inputLog.skill', reason: 'missing field' });
+  });
+
+  it('rejects an embedded version 2 log (traces embed only v24 version 1 logs)', () => {
+    const { skill: _skill, ...v2 } = trace().inputLog as Record<string, unknown>;
+    expect(pathsOf(trace({ inputLog: { ...v2, version: 2 } })).sort()).toEqual(['$.inputLog.skill', '$.inputLog.version']);
+  });
+
   it('rejects an unknown source', () => {
     expect(pathsOf(trace({ source: 'prototype-v23' }))).toContain('$.source');
   });

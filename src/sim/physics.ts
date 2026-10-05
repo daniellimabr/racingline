@@ -10,13 +10,25 @@ export const G = 9.81; // m/s2 (v24 g)
 export const shape = (c: CarParams, st: number): number => c.steerLinear * st + c.steerQuad * st * Math.abs(st);
 /** Speed-limited lock, rad (v24 dLim). */
 export const dLim = (c: CarParams, v: number): number => Math.max(c.steerMin, c.maxSteer / (1 + v / c.steerSpeedRef));
-/** Friction coefficient for a skill (v24 muOf). */
-export const muOf = (c: CarParams, skill: number): number => c.gripBase + c.gripPerSkill * skill;
 /** Normalized tire force for a slip angle (v24 tire). */
 export const tire = (c: CarParams, a: number): number => Math.sin(c.tireC * Math.atan(c.tireB * a));
 /** Engine torque, N m (v24 torqueAt). */
 export const torqueAt = (c: CarParams, r: number): number =>
   c.peakTorque * Math.max(c.torqueFloor, 1 - ((r - c.torquePeakRpm) / c.torqueWidthRpm) ** 2);
+/** Aero accelerations (m/s2, per unit mass) at speed v: downforce on each axle and drag (ADR-004). */
+export interface Aero {
+  front: number;
+  rear: number;
+  drag: number;
+}
+
+/** F = 0.5 * airDensity * area * v^2, divided by mass. Exactly 0 for a car without aero areas. */
+export function aero(c: CarParams, v: number): Aero {
+  const q = (0.5 * c.airDensity * v * v) / c.mass;
+  const down = q * c.downforceArea;
+  return { front: down * c.aeroBalanceFront, rear: down * (1 - c.aeroBalanceFront), drag: q * c.dragArea };
+}
+
 /** Total ratio of a gear index 0..5 (v24 ratio). */
 export const ratio = (c: CarParams, gr: number): number => c.gears[gr]! * c.finalDrive;
 
@@ -33,14 +45,16 @@ export function steer(c: CarParams, s: CarState, spd: number): number {
 
 /** One physics sub-step (v24 phys). */
 export function phys(s: CarState, dt: number, p: SimParams): void {
-  const c = p.car, skill = p.skill, L = c.wheelbase, LA = c.la, LB = c.lb;
-  const mu = muOf(c, skill) * (s.off ? p.lot.offGrip : 1), spd = Math.hypot(s.vx, s.vy);
+  const c = p.car, L = c.wheelbase, LA = c.la, LB = c.lb;
+  const mu = c.grip * (s.off ? p.lot.offGrip : 1), spd = Math.hypot(s.vx, s.vy);
   // v24 evaluates this expression twice (Aav and Afull); once is the same double.
   const Afull = (torqueAt(c, s.rpm) * ratio(c, s.gear) * c.drivelineEff) / c.wheelRadius / c.mass;
   const Aav = s.cut || s.shiftT > 0 ? 0 : Afull;
   const A = s.t * Aav, D = s.b * c.brakeDecel;
   const Wf = Math.max(c.frontWeightMin, Math.min(c.frontWeightMax, c.staticFrontWeight - (c.cgHeightRatio * s.axp) / G));
-  const Wr = 1 - Wf, Gf = mu * G * Wf, Gr = mu * G * Wr;
+  // Aero terms are added, never folded in: with zero aero `x + 0` is exact, so the S15 stays bit-identical.
+  const ae = aero(c, spd);
+  const Wr = 1 - Wf, Gf = mu * G * Wf + mu * ae.front, Gr = mu * G * Wr + mu * ae.rear;
   const u = A / Gr;
   s.u = u;
   s.lim = Math.min(1, Gr / Math.max(0.01, Afull));
@@ -54,13 +68,13 @@ export function phys(s: CarState, dt: number, p: SimParams): void {
   const rB = mv ? Math.min(c.brakeRear * D, Gr * c.brakeLockMargin) : 0;
   const Fxr = Fdrive - dir * rB, Fxf = -dir * fL;
   const FfMax = Math.sqrt(Math.max(0, Gf * Gf - fL * fL)), GrL = Gr * latF, FrMax = Math.sqrt(Math.max(0, GrL * GrL - rB * rB));
-  const delta = steer(c, s, spd) + s.wob * (1 - skill) * c.wobbleGain * Math.min(1, spd / c.wobbleSpeed);
+  const delta = steer(c, s, spd);
   s.delta = delta;
   const ebrake =
     s.t < c.engineBrakeThrottle && !s.cut
       ? (c.engineBrake * Math.min(1, s.rpm / c.engineBrakeRpm) * c.gears[s.gear]!) / c.engineBrakeGearDiv
       : 0;
-  const drag = c.dragCoef * spd * spd + (mv ? c.rollingDecel + ebrake : 0) + (s.off ? spd * p.lot.offDrag : 0);
+  const drag = c.dragCoef * spd * spd + (mv ? c.rollingDecel + ebrake : 0) + (s.off ? spd * p.lot.offDrag : 0) + ae.drag;
   const dx = spd > 0.05 ? (-drag * s.vx) / spd : 0, dy = spd > 0.05 ? (-drag * s.vy) / spd : 0;
   const fLong = s.lockF ? c.lockUsage : (c.brakeFront * D) / Math.max(Gf, 0.1), rLong = (A + rB) / Math.max(Gr, 0.1);
   if (s.vx < 3 && Math.abs(s.vy) < 1.5) {

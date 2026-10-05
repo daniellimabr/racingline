@@ -1,4 +1,5 @@
 // S001-AC-10: malformed input logs are rejected with path + reason.
+// S002-T10: version 2 drops the skill setting; version 1 logs are rejected with a clear reason.
 import { describe, expect, it } from 'vitest';
 import { DataError } from './check.ts';
 import { parseInputLog, validateInputLog, type InputLog } from './input-log.ts';
@@ -15,9 +16,8 @@ const frame = (over: Record<string, unknown> = {}): Record<string, unknown> => (
 });
 
 const log = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
-  version: 1,
+  version: 2,
   seed: 12345,
-  skill: 0.4,
   car: 's15-drift',
   tickSeconds: 1 / 60,
   subSteps: 10,
@@ -32,7 +32,7 @@ const errorsOf = (v: unknown) => {
 };
 
 describe('validateInputLog (S001-AC-10)', () => {
-  it('accepts a valid v1 log and returns it typed', () => {
+  it('accepts a valid v2 log and returns it typed', () => {
     const r = validateInputLog(log());
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -55,13 +55,25 @@ describe('validateInputLog (S001-AC-10)', () => {
     expect(errorsOf(v)[0]?.path).toBe('$');
   });
 
-  it.each([2, 0, '1', null])('rejects version %s', (version) => {
+  it.each([3, 0, '2', null])('rejects version %s', (version) => {
     expect(errorsOf(log({ version }))).toContainEqual(
       expect.objectContaining({ path: '$.version', reason: expect.stringMatching(/version/) }),
     );
   });
 
-  it.each(['version', 'seed', 'skill', 'car', 'tickSeconds', 'subSteps', 'frames'])(
+  it('rejects a version 1 log with one clear reason (it carries the removed skill setting)', () => {
+    const errors = errorsOf(log({ version: 1, skill: 0.4 }));
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.path).toBe('$.version');
+    expect(errors[0]?.reason).toMatch(/version 1 .*no longer supported.*skill.*record the run again/);
+    expect(() => parseInputLog(log({ version: 1, skill: 0.4 }))).toThrowError(/version 1 .*no longer supported/);
+  });
+
+  it('rejects a skill field in a version 2 log', () => {
+    expect(errorsOf(log({ skill: 0.4 }))).toContainEqual({ path: '$.skill', reason: 'unknown field' });
+  });
+
+  it.each(['version', 'seed', 'car', 'tickSeconds', 'subSteps', 'frames'])(
     'rejects a missing top-level field "%s"',
     (key) => {
       const bad = log();
@@ -95,7 +107,6 @@ describe('validateInputLog (S001-AC-10)', () => {
 
   it.each([
     ['seed', '1'],
-    ['skill', '0.4'],
     ['car', 5],
     ['car', ''],
     ['tickSeconds', '1/60'],
@@ -118,10 +129,6 @@ describe('validateInputLog (S001-AC-10)', () => {
 
   it.each([1.5, -0.1, Number.NaN, Number.POSITIVE_INFINITY])('rejects throttle %s (outside 0..1 or not finite)', (v) => {
     expect(errorsOf(log({ frames: [frame({ throttle: v })] })).map((e) => e.path)).toContain('$.frames[0].throttle');
-  });
-
-  it.each([-0.01, 1.01, Number.NaN])('rejects skill %s', (skill) => {
-    expect(errorsOf(log({ skill })).map((e) => e.path)).toContain('$.skill');
   });
 
   it.each([-1, 1.5, 2 ** 32, Number.NaN])('rejects seed %s (not a uint32)', (seed) => {

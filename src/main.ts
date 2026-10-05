@@ -1,15 +1,17 @@
 // Entry point (ADR-001): fixed-timestep sim + keyboard + canvas render + DOM UI, behaving like
 // prototype-v24.html. The sim advances in 1/60 s ticks; rendering reads state and interpolates position.
 import { advance } from './core/accumulator.ts';
-import { createState, step, TICK, type SimState } from './core/sim.ts';
+import { createCarRegistry, switchCar } from './core/car-registry.ts';
+import { step, TICK, type SimState } from './core/sim.ts';
 import { KeyboardDevice } from './input/index.ts';
-import { carStep, createCar, createSimParams, loadCarParams, type CarState, type DriftRecord } from './sim/index.ts';
-import s15 from './cars/s15-drift.json';
-import { buildLot } from './render/lot.ts';
+import { carStep, createSimParams, loadCarParams, type CarState, type DriftRecord } from './sim/index.ts';
+import { startRun } from './run.ts';
+import { buildLot, type LotArt } from './render/lot.ts';
 import { drawScene } from './render/scene.ts';
 import { drawTelemetry } from './render/telemetry.ts';
 import { createView, recordTick, type View } from './render/view.ts';
 import { analysisHtml, driftTableHtml } from './ui/drifts.ts';
+import { carHud, rpmLegend } from './ui/hud-car.ts';
 
 function byId<T extends HTMLElement>(id: string, type: new () => T): T {
   const el = document.getElementById(id);
@@ -22,16 +24,20 @@ function context2d(cv: HTMLCanvasElement): CanvasRenderingContext2D {
   return c;
 }
 
-const cv = byId('cv', HTMLCanvasElement), tc = byId('tc', HTMLCanvasElement), sk = byId('sk', HTMLInputElement);
-const skv = byId('skv', HTMLElement), pst = byId('pst', HTMLElement), msg = byId('msg', HTMLElement);
+const cv = byId('cv', HTMLCanvasElement), tc = byId('tc', HTMLCanvasElement);
+const pst = byId('pst', HTMLElement), msg = byId('msg', HTMLElement);
 const dt = byId('dt', HTMLTableElement), an = byId('an', HTMLElement);
+const carEl = byId('car', HTMLElement), rpml = byId('rpml', HTMLElement);
 const c = context2d(cv), t2 = context2d(tc);
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 
-const carParams = loadCarParams(s15, 'src/cars/s15-drift.json');
-const skill = () => Math.min(1, Math.max(0, Number(sk.value) || 0));
-let params = createSimParams(carParams, skill());
-const lot = buildLot((w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }), params.lot);
+// Every car file in src/cars is selectable (S002-T6); a new file such as gt3.json joins the C-key cycle.
+const carFiles = import.meta.glob<unknown>('./cars/*.json', { eager: true, import: 'default' });
+const cars = createCarRegistry(Object.entries(carFiles).map(([file, json]) => loadCarParams(json, file)));
+let carId = cars.has('s15-drift') ? 's15-drift' : cars.list[0]!.id;
+let params = createSimParams(cars.get(carId));
+const makeCanvas = (w: number, h: number) => Object.assign(document.createElement('canvas'), { width: w, height: h });
+let lot: LotArt = buildLot(makeCanvas, params.lot);
 const seed = () => crypto.getRandomValues(new Uint32Array(1))[0]!;
 
 let state: SimState<CarState>, prev: CarState, view: View, acc = 0, alpha = 0, paused = false;
@@ -43,9 +49,13 @@ function renderDrifts(drifts: readonly DriftRecord[]): void {
   an.innerHTML = analysisHtml(drifts);
 }
 
-/** v24 reset(): new car and empty histories; the skill setting is kept. */
+/** v24 reset(): new car and empty histories; the chosen car is kept. */
 function reset(): void {
-  state = createState(seed(), createCar(params));
+  ({ state, params } = startRun({ seed: seed(), car: carId }, cars));
+  // The lot art must match the run's lot settings, whichever car started the run.
+  if (params.lot !== lot.lot) lot = buildLot(makeCanvas, params.lot);
+  carEl.textContent = carHud(params.car).label;
+  rpml.textContent = rpmLegend(params.car);
   prev = state.car;
   view = createView(seed());
   acc = 0;
@@ -61,18 +71,19 @@ function togglePause(): void {
   pst.textContent = paused ? 'Continuar (P)' : 'Pausar (P)';
 }
 
-const keyboard = new KeyboardDevice(cv, { onPause: togglePause });
+/** C key: restart the run with the next car; ignored while paused. */
+function nextCar(): void {
+  const next = switchCar(cars, carId, paused);
+  if (next === null) return;
+  carId = next;
+  reset();
+}
+
+const keyboard = new KeyboardDevice(cv, { onPause: togglePause, onCarSwitch: nextCar });
 const HINT_IDLE = 'Clique no pátio para focar';
 cv.addEventListener('blur', () => (msg.textContent = HINT_IDLE));
-cv.addEventListener('focus', () => (msg.textContent = 'W/S pedais · A/D direção · , reduz · . sobe · M auto · P pausa'));
+cv.addEventListener('focus', () => (msg.textContent = 'W/S pedais · A/D direção · , reduz · . sobe · M auto · C carro · P pausa'));
 cv.addEventListener('click', () => cv.focus());
-// v24: the slider only changes the skill used from the next tick on; it does not reset the run.
-sk.addEventListener('input', () => {
-  const pctText = Math.round(skill() * 100) + '%';
-  skv.textContent = pctText;
-  sk.setAttribute('aria-valuetext', pctText);
-  params = createSimParams(carParams, skill());
-});
 byId('ps', HTMLButtonElement).addEventListener('click', () => {
   togglePause();
   cv.focus();
@@ -105,7 +116,7 @@ function loop(now: number): void {
     }
   }
   drawScene(c, { car: blended(prev, state.car, alpha), params, view, lot, paused, dt: Math.min(0.033, Math.max(0, frame)) });
-  drawTelemetry(t2, view, state.car.tt, darkQuery.matches);
+  drawTelemetry(t2, view, state.car.tt, darkQuery.matches, carHud(params.car).rpmScale);
   if (state.car.drifts !== shownDrifts) renderDrifts(state.car.drifts);
   requestAnimationFrame(loop);
 }

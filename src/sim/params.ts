@@ -1,15 +1,15 @@
 // Car parameters as data (ADR-001): the S15 field list for src/data's generic validator, plus the
-// run settings (skill, lot). Each field: unit · v24 source · confidence. "spec" = real S15 figure,
+// run settings (lot). Each field: unit · v24 source · confidence. "spec" = real S15 figure,
 // "tuned" = Daniel tuned it by feel in v24 (keep unless he decides otherwise), "model" = model shape.
 import { DataError } from '../data/check.ts';
-import { parseCarParams, type CarParamsSchema, type ParamsOf } from '../data/car-params.ts';
+import { parseCarParams, type CarBase, type CarParamsSchema, type ParamsOf } from '../data/car-params.ts';
 
 const num = (min: number, max: number, integer = false) =>
   integer ? ({ type: 'number', min, max, integer } as const) : ({ type: 'number', min, max } as const);
 
+// id, name and the aero fields (downforceArea, dragArea, aeroBalanceFront, airDensity) come from
+// CAR_BASE_FIELDS in src/data/car-params.ts, shared by every car file.
 export const CAR_SCHEMA = {
-  id: { type: 'string' },
-  name: { type: 'string' },
   mass: num(100, 5000), // kg · MASS · spec
   wheelbase: num(1, 5), // m · L · spec
   frontAxleFraction: num(0.1, 0.9), // CG to front axle / wheelbase · LA=0.45*L · tuned
@@ -19,8 +19,7 @@ export const CAR_SCHEMA = {
   frontWeightMin: num(0, 1), // clamp on the dynamic front share · 0.3 · tuned
   frontWeightMax: num(0, 1), // · 0.8 · tuned
   wheelRadius: num(0.1, 1), // m · RW · spec
-  gripBase: num(0.1, 3), // friction coefficient at skill 0 · muOf() 0.95 · tuned
-  gripPerSkill: num(0, 1), // extra friction at skill 1 · muOf() 0.1 · tuned
+  grip: num(0.1, 3), // tire friction coefficient · v24 muOf() at its default skill 0.4 (S15 0.95 + 0.1*0.4) · tuned
   tireB: num(1, 50), // tire curve stiffness, F = sin(C*atan(B*slip)) · tire() 14 · model
   tireC: num(0.5, 3), // tire curve shape · tire() 1.5 · model
   tirePeakSlip: num(0.01, 0.5), // rad, slip angle shown as 100% use · PK · tuned
@@ -78,16 +77,12 @@ export const CAR_SCHEMA = {
   autoDownMaxRpm: num(1000, 20000), // ... only if the lower gear stays below this rpm · 6500 · tuned
   shiftTime: num(0, 5), // s without drive while shifting · 0.15 · tuned
   shiftCooldown: num(0, 5), // s before the next shift · 0.3 · tuned
-  wobbleAmp: num(0, 10000), // steering wobble noise amplitude · step() 700 · tuned
-  wobbleDecay: num(0, 100), // 1/s, wobble pull back to zero · step() 4 · tuned
-  wobbleGain: num(0, 0.01), // rad of steer per wobble unit at skill 0 · 0.00015 · tuned
-  wobbleSpeed: num(0.1, 200), // m/s where the wobble reaches full effect · 20 · tuned
 } as const satisfies CarParamsSchema;
 
 export type CarData = ParamsOf<typeof CAR_SCHEMA>;
 
 /** Validated car data plus values v24 derives once from its constants (same expressions). */
-export interface CarParams extends CarData {
+export interface CarParams extends CarData, CarBase {
   gears: readonly number[]; // GRS
   maxSteer: number; // DMAX, rad
   la: number; // LA, m
@@ -135,14 +130,12 @@ export const TEST_LOT: Lot = Object.freeze({
   scale: 9, x0: 100, y0: 100, x1: 2300, y1: 1700, startX: 400, startY: 900, offGrip: 0.55, offDrag: 0.8,
 });
 
-/** Everything the car step reads besides state and input. Skill comes from the run (input log header). */
+/** Everything the car step reads besides state and input (the skill setting was removed in S002-T10). */
 export interface SimParams {
   car: CarParams;
-  skill: number; // 0..1, v24 "Experiência" slider
   lot: Lot;
 }
 
-export function createSimParams(car: CarParams, skill: number, lot: Lot = TEST_LOT): SimParams {
-  if (!(skill >= 0 && skill <= 1)) throw new RangeError(`skill must be a number in 0..1, got ${skill}`);
-  return { car, skill, lot };
+export function createSimParams(car: CarParams, lot: Lot = TEST_LOT): SimParams {
+  return { car, lot };
 }

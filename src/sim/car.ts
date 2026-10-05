@@ -1,5 +1,6 @@
 // The car step for src/core: one 1/60 s tick of v24, in v24's order (prototype lines 80-82, 137-151,
-// 199-201): gear buttons, wobble, sim() with its sub-steps, clock, off-lot check, drift tracker.
+// 199-201): gear buttons, sim() with its sub-steps, clock, off-lot check, drift tracker.
+// The v24 steering wobble was removed in S002-T10 with the skill setting.
 import type { InputFrame } from '../core/input-frame.ts';
 import type { CarStep } from '../core/sim.ts';
 import { trackDrift, DRIFT_BETA } from './drift.ts';
@@ -65,8 +66,6 @@ export const carStep: CarStep<CarState, SimParams> = (car, input, p, ctx) => {
   if (input.shiftUp) manualShift(c, s, 1);
   if (input.shiftDown) manualShift(c, s, -1);
   if (input.toggleAuto) s.auto = !s.auto;
-  // v24 step(): wobble from this tick's seeded draw, then sim().
-  s.wob += ((ctx.wobble - 0.5) * c.wobbleAmp - s.wob * c.wobbleDecay) * dt;
   sim(s, dt, input, p, ctx.substeps);
   s.tt += dt;
   const L = p.lot, px = s.x * L.scale, py = s.y * L.scale;

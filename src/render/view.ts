@@ -2,6 +2,7 @@
 // telemetry samples. Fed once per sim tick; reads the car, never writes it. Smoke randomness comes
 // from a render-only mulberry32 state here, never from the sim rng.
 import { next } from '../core/rng.ts';
+import { carLook } from './car-look.ts';
 import { HALO_SPAN, HALO_THRESHOLD, type CarState, type SimParams } from '../sim/index.ts';
 
 // Axle diagram layout (screen px), shared with the HUD.
@@ -10,7 +11,6 @@ export const DIAG_FY = DIAG.y - DIAG.wheelbase / 2;
 export const DIAG_RY = DIAG.y + DIAG.wheelbase / 2;
 export const TEL_SECONDS = 12;
 const TRAIL_MAX = 700, SKID_MAX = 6000, SMOKE_MAX = 160, DSM_MAX = 120;
-const HALF_TRACK = 6.5; // px, wheel offset from the car axis
 
 export interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; s: number }
 export interface TelSample { tt: number; thr: number; lim: number; rpm: number; beta: number; p: number; dr: boolean }
@@ -28,6 +28,9 @@ export interface View {
 export const createView = (seed = 1): View => ({
   trail: [], skids: [], smoke: [], dsm: [], tel: [], rng: seed >>> 0, zoom: 1.25,
 });
+
+/** px, wheel offset from the car axis for skids and smoke (6.5 px on the S15, wider cars further out). */
+const halfTrack = (p: SimParams): number => carLook(p.car, p.lot.scale).halfWidth - 1.1;
 
 function rand(view: View): number {
   const d = next(view.rng);
@@ -49,7 +52,8 @@ export function recordTick(view: View, s: CarState, p: SimParams, dt: number): v
   if (view.trail.length > TRAIL_MAX) view.trail.shift();
   if (s.v > 1.5 && !s.off && (s.mode || s.wspin || s.lockF)) {
     const ch = Math.cos(s.h), sh = Math.sin(s.h), ax = (s.mode === 'front' || s.lockF ? p.car.la : -p.car.lb) * PX;
-    for (const l of [-HALF_TRACK, HALF_TRACK]) view.skids.push([px + ch * ax - sh * l, py + sh * ax + ch * l]);
+    const tr = halfTrack(p);
+    for (const l of [-tr, tr]) view.skids.push([px + ch * ax - sh * l, py + sh * ax + ch * l]);
     if (view.skids.length > SKID_MAX) view.skids.splice(0, 2);
   }
   emit(view, s, p, dt);
@@ -63,7 +67,7 @@ function emit(view: View, s: CarState, p: SimParams, dt: number): void {
     const k = Math.min(1, Math.max(0, use - 1) * 1.6);
     if (k <= 0 || s.off || (s.v < 1 && s.spinR <= 0)) continue;
     if (rand(view) < k * dt * 18) {
-      for (const l of [-HALF_TRACK, HALF_TRACK]) {
+      for (const l of [-halfTrack(p), halfTrack(p)]) {
         const wx = px + ch * ax - sh * l, wy = py + sh * ax + ch * l;
         view.smoke.push({
           x: wx - ch * 10, y: wy - sh * 10, vx: -ch * 8 + (rand(view) - 0.5) * 12, vy: -sh * 8 + (rand(view) - 0.5) * 12,

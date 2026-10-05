@@ -1,6 +1,6 @@
 {
   "id": "s15-drift",
-  "name": "Nissan Silvia S15-like drift test car (prototype v24)",
+  "name": "S15 Drift",
   "mass": 1335,
   "wheelbase": 2.525,
   "frontAxleFraction": 0.45,
@@ -10,8 +10,7 @@
   "frontWeightMin": 0.3,
   "frontWeightMax": 0.8,
   "wheelRadius": 0.31,
-  "gripBase": 0.95,
-  "gripPerSkill": 0.1,
+  "grip": 0.99,
   "tireB": 14,
   "tireC": 1.5,
   "tirePeakSlip": 0.12,
@@ -49,7 +48,7 @@
   "torqueWidthRpm": 5200,
   "torqueFloor": 0.36,
   "gear1": 3.321,
-  "gear2": 1.902,
+  "gear2": 2.1,
   "gear3": 1.308,
   "gear4": 1.0,
   "gear5": 0.759,
@@ -68,9 +67,5 @@
   "autoDownRpm": 3000,
   "autoDownMaxRpm": 6500,
   "shiftTime": 0.15,
-  "shiftCooldown": 0.3,
-  "wobbleAmp": 700,
-  "wobbleDecay": 4,
-  "wobbleGain": 0.00015,
-  "wobbleSpeed": 20
+  "shiftCooldown": 0.3
 }
