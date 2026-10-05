@@ -2,14 +2,14 @@
 // run settings (skill, lot). Each field: unit · v24 source · confidence. "spec" = real S15 figure,
 // "tuned" = Daniel tuned it by feel in v24 (keep unless he decides otherwise), "model" = model shape.
 import { DataError } from '../data/check.ts';
-import { parseCarParams, type CarParamsSchema, type ParamsOf } from '../data/car-params.ts';
+import { parseCarParams, type CarBase, type CarParamsSchema, type ParamsOf } from '../data/car-params.ts';
 
 const num = (min: number, max: number, integer = false) =>
   integer ? ({ type: 'number', min, max, integer } as const) : ({ type: 'number', min, max } as const);
 
+// id, name and the aero fields (downforceArea, dragArea, aeroBalanceFront, airDensity) come from
+// CAR_BASE_FIELDS in src/data/car-params.ts, shared by every car file.
 export const CAR_SCHEMA = {
-  id: { type: 'string' },
-  name: { type: 'string' },
   mass: num(100, 5000), // kg · MASS · spec
   wheelbase: num(1, 5), // m · L · spec
   frontAxleFraction: num(0.1, 0.9), // CG to front axle / wheelbase · LA=0.45*L · tuned
@@ -87,7 +87,7 @@ export const CAR_SCHEMA = {
 export type CarData = ParamsOf<typeof CAR_SCHEMA>;
 
 /** Validated car data plus values v24 derives once from its constants (same expressions). */
-export interface CarParams extends CarData {
+export interface CarParams extends CarData, CarBase {
   gears: readonly number[]; // GRS
   maxSteer: number; // DMAX, rad
   la: number; // LA, m

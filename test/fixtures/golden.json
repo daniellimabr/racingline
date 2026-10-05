@@ -1,0 +1,32 @@
+{
+  "reasons": [
+    "Baseline: the game as merged at a02dac2 (Sprint 001 port plus Sprint 002 car id, name and car switch); replaces the v24 trace comparison.",
+    "S002-T5: S15 2nd gear 1.902 -> 2.1 for more pull at low rpm (manual-shift, straight-accel and wobble use 2nd; Daniel feel-checks it)."
+  ],
+  "scenarios": {
+    "braking": {
+      "state": "68b73846460fda91",
+      "line": "5fe3a7e0d45a6a34"
+    },
+    "drift-countersteer": {
+      "state": "055c9152d4cfcf14",
+      "line": "05f1ca92924a0bff"
+    },
+    "manual-shift": {
+      "state": "86122be62090db62",
+      "line": "d4461535650765c0"
+    },
+    "steady-corner": {
+      "state": "c9df4a62c604034f",
+      "line": "1c6bb9f3be3c0248"
+    },
+    "straight-accel": {
+      "state": "320ea2dc4aa12ce2",
+      "line": "b1972deead926108"
+    },
+    "wobble": {
+      "state": "2517c7534b7695d1",
+      "line": "c9e4a3a0be75cccd"
+    }
+  }
+}

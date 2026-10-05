@@ -17,6 +17,20 @@ export const tire = (c: CarParams, a: number): number => Math.sin(c.tireC * Math
 /** Engine torque, N m (v24 torqueAt). */
 export const torqueAt = (c: CarParams, r: number): number =>
   c.peakTorque * Math.max(c.torqueFloor, 1 - ((r - c.torquePeakRpm) / c.torqueWidthRpm) ** 2);
+/** Aero accelerations (m/s2, per unit mass) at speed v: downforce on each axle and drag (ADR-004). */
+export interface Aero {
+  front: number;
+  rear: number;
+  drag: number;
+}
+
+/** F = 0.5 * airDensity * area * v^2, divided by mass. Exactly 0 for a car without aero areas. */
+export function aero(c: CarParams, v: number): Aero {
+  const q = (0.5 * c.airDensity * v * v) / c.mass;
+  const down = q * c.downforceArea;
+  return { front: down * c.aeroBalanceFront, rear: down * (1 - c.aeroBalanceFront), drag: q * c.dragArea };
+}
+
 /** Total ratio of a gear index 0..5 (v24 ratio). */
 export const ratio = (c: CarParams, gr: number): number => c.gears[gr]! * c.finalDrive;
 
@@ -40,7 +54,9 @@ export function phys(s: CarState, dt: number, p: SimParams): void {
   const Aav = s.cut || s.shiftT > 0 ? 0 : Afull;
   const A = s.t * Aav, D = s.b * c.brakeDecel;
   const Wf = Math.max(c.frontWeightMin, Math.min(c.frontWeightMax, c.staticFrontWeight - (c.cgHeightRatio * s.axp) / G));
-  const Wr = 1 - Wf, Gf = mu * G * Wf, Gr = mu * G * Wr;
+  // Aero terms are added, never folded in: with zero aero `x + 0` is exact, so the S15 stays bit-identical.
+  const ae = aero(c, spd);
+  const Wr = 1 - Wf, Gf = mu * G * Wf + mu * ae.front, Gr = mu * G * Wr + mu * ae.rear;
   const u = A / Gr;
   s.u = u;
   s.lim = Math.min(1, Gr / Math.max(0.01, Afull));
@@ -60,7 +76,7 @@ export function phys(s: CarState, dt: number, p: SimParams): void {
     s.t < c.engineBrakeThrottle && !s.cut
       ? (c.engineBrake * Math.min(1, s.rpm / c.engineBrakeRpm) * c.gears[s.gear]!) / c.engineBrakeGearDiv
       : 0;
-  const drag = c.dragCoef * spd * spd + (mv ? c.rollingDecel + ebrake : 0) + (s.off ? spd * p.lot.offDrag : 0);
+  const drag = c.dragCoef * spd * spd + (mv ? c.rollingDecel + ebrake : 0) + (s.off ? spd * p.lot.offDrag : 0) + ae.drag;
   const dx = spd > 0.05 ? (-drag * s.vx) / spd : 0, dy = spd > 0.05 ? (-drag * s.vy) / spd : 0;
   const fLong = s.lockF ? c.lockUsage : (c.brakeFront * D) / Math.max(Gf, 0.1), rLong = (A + rB) / Math.max(Gr, 0.1);
   if (s.vx < 3 && Math.abs(s.vy) < 1.5) {
