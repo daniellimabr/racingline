@@ -27,6 +27,8 @@ export const CAR_BASE_FIELDS = {
   dragArea: { type: 'number', min: 0, max: 10, default: 0 }, // m2, drag coefficient x frontal area (CdA)
   aeroBalanceFront: { type: 'number', min: 0, max: 1, default: 0 }, // share of downforce on the front axle
   airDensity: { type: 'number', min: 0, max: 2, default: 1.225 }, // kg/m3, sea level at 15 C
+  // Wheel geometry for the off-track rule (S003-T5): distance between left and right wheel centres.
+  trackWidth: { type: 'number', min: 0.5, max: 3, default: 1.5 }, // m
 } as const satisfies CarParamsSchema;
 
 export type CarBase = ParamsOf<typeof CAR_BASE_FIELDS>;

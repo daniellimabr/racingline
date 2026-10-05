@@ -2,6 +2,7 @@
   "id": "gt3",
   "name": "GT3",
   "mass": 1320,
+  "trackWidth": 1.6,
   "wheelbase": 2.65,
   "frontAxleFraction": 0.55,
   "rearAxleFraction": 0.45,

@@ -23,8 +23,8 @@ const params = (over: Record<string, unknown> = {}): Record<string, unknown> => 
   ...over,
 });
 
-/** What the validator adds to every car file that leaves the aero fields out (S002-AC-02). */
-const NO_AERO = { downforceArea: 0, dragArea: 0, aeroBalanceFront: 0, airDensity: 1.225 };
+/** What the validator adds to every car file that leaves the aero fields (S002-AC-02) and the track width (S003-T5) out. */
+const NO_AERO = { downforceArea: 0, dragArea: 0, aeroBalanceFront: 0, airDensity: 1.225, trackWidth: 1.5 };
 
 const errorsOf = (v: unknown) => {
   const r = validateCarParams(SAMPLE, v);
@@ -44,7 +44,7 @@ describe('validateCarParams (S001-AC-09 generic part)', () => {
   });
 
   it('round-trips through JSON (write -> read -> equal)', () => {
-    const original = params({ downforceArea: 2, dragArea: 0.8, aeroBalanceFront: 0.4, airDensity: 1.2 });
+    const original = params({ downforceArea: 2, dragArea: 0.8, aeroBalanceFront: 0.4, airDensity: 1.2, trackWidth: 1.6 });
     expect(parseCarParams(SAMPLE, JSON.parse(JSON.stringify(original)), 'sample.json')).toEqual(original);
   });
 
