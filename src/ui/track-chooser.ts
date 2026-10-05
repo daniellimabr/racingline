@@ -6,14 +6,7 @@ export interface TrackOption {
   readonly name: string;
 }
 
-/** Id of the test lot (the run header's default when no track is named). */
-export const LOT_ID = 'lot';
-export const LOT_OPTION: TrackOption = Object.freeze({ id: LOT_ID, name: 'Pátio de testes' });
-
-/** The test lot first, then every shipped track in list order. */
-export function trackOptions(tracks: readonly TrackOption[]): TrackOption[] {
-  return [LOT_OPTION, ...tracks.map((t) => ({ id: t.id, name: t.name }))];
-}
+// The option list itself is TRACK_CHOICES in src/run.ts (test lot first, then every shipped track).
 
 /** The option after `id`, wrapping round; an unknown id gives the first option. */
 export function nextTrack(options: readonly TrackOption[], id: string): TrackOption {

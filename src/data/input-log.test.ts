@@ -1,8 +1,8 @@
 // S001-AC-10: malformed input logs are rejected with path + reason.
 // S002-T10: version 2 drops the skill setting; version 1 logs are rejected with a clear reason.
 import { describe, expect, it } from 'vitest';
-import { DataError } from './check.ts';
-import { parseInputLog, validateInputLog, type InputLog } from './input-log.ts';
+import { Checker, DataError } from './check.ts';
+import { checkInputLog, parseInputLog, validateInputLog, type InputLog } from './input-log.ts';
 
 const frame = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   throttle: 1,
@@ -45,6 +45,23 @@ describe('validateInputLog (S001-AC-10)', () => {
     const original = log();
     const back = parseInputLog(JSON.parse(JSON.stringify(original)));
     expect(back).toEqual(original);
+  });
+
+  // S003-T5: a run may name its track (absent means the test lot); agreed with Database in
+  // docs/sprints/SPRINT-003/mailbox/back-end-to-database-lap-lines.md.
+  it('round-trips a run that names its track', () => {
+    const original = log({ track: 'interlagos' });
+    expect(parseInputLog(JSON.parse(JSON.stringify(original)))).toEqual(original);
+  });
+
+  it.each(['', 'Interlagos', 'inter lagos', 7])('rejects the track name %j', (track) => {
+    expect(errorsOf(log({ track })).map((e) => e.path)).toEqual(['$.track']);
+  });
+
+  it('rejects a track in a v24 version 1 run (those were all recorded on the test lot)', () => {
+    const c = new Checker();
+    checkInputLog(c, { ...log({ version: 1, skill: 0.4 }), track: 'interlagos' }, '$.inputLog', true);
+    expect(c.issues.map((e) => e.path)).toEqual(['$.inputLog.track']);
   });
 
   it('accepts an empty frame list (a run of zero ticks)', () => {
