@@ -15,14 +15,15 @@ const TRACKS = {
     timingNode: 13826424126, // the relation's "finish" node (OSM name "Finish Line")
     width: 13,
     spawnBack: 20,
-    surfaces: { asphalt: { grip: 1, drag: 0 }, kerb: { grip: 0.9, drag: 0.2 }, grass: { grip: 0.55, drag: 0.8 } },
+    surfaces: { asphalt: { grip: 1, drag: 0 }, kerb: { grip: 0.9, drag: 0 }, grass: { grip: 0.55, drag: 0.08 } },
     road: 'asphalt',
     verge: [{ surface: 'kerb', width: 1 }],
     outside: 'grass',
     estimates: {
       width: 'The width is 13 m everywhere because the map data has no width for this circuit; the real track is about 12 to 15 m wide.',
       sectors: 'The three sectors are equal thirds of the lap, because the official timing split points were not found in a source we can cite.',
-      surfaces: 'A 1 m kerb runs along both edges all the way round with grass beyond, using the test lot off-track grip and drag; real kerbs sit at corners and some run-off is paved.',
+      surfaces: 'A 1 m kerb runs along both edges all the way round with grass beyond; real kerbs sit at corners and some run-off is paved.',
+      surfaceValues: 'Kerb drag 0 and grass drag 0.08 per m/s (about 0.45 g of slowing at 200 km/h), with the grips kept at 0.9 and 0.55, were chosen by Daniel on 2026-10-05 (option B, realistic).',
       startLine: 'The start line is the map data finish line, which is the timing line; the separate grid start line is not used.',
       spawn: 'The car starts 20 m behind the start line, on the centerline, facing the driving direction.',
       projection: 'Positions use a flat map centred on the start line with WGS84 local radii, which is accurate to a few centimetres over the circuit.',

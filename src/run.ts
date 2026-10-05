@@ -7,6 +7,7 @@ import type { InputLog } from './data/input-log.ts';
 import type { Track } from './data/track.ts';
 import { carStep, createCar, createLapState, createSimParams, TEST_LOT, type CarParams, type CarState, type SimParams } from './sim/index.ts';
 import { TRACKS } from './tracks/index.ts';
+import { surfaceAt } from './tracks/surface-at.ts';
 
 /** The input log header fields that decide the starting state; no track means the test lot. */
 export type RunHeader = Pick<InputLog, 'seed' | 'car' | 'track'>;
@@ -43,7 +44,8 @@ export function startRun(header: RunHeader, cars: CarRegistry<CarParams>, tracks
     throw new Error(`unknown track id "${id}" (known: ${[LOT_TRACK_ID, ...tracks.map((t) => t.id)].join(', ')})`);
   }
   // The lot settings stay for the drawing scale (px per m), so cars draw the same size on every track.
-  const params = createSimParams(car, TEST_LOT, track);
+  // S003-T6: the physics reads the surface under each axle through Back End's lookup.
+  const params: SimParams = { ...createSimParams(car, TEST_LOT, track), surfaceAt };
   const { x, y, h } = track.spawn;
   return { params, state: createState(header.seed, { ...createCar(params), x, y, h, lap: createLapState(track) }) };
 }

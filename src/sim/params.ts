@@ -4,6 +4,7 @@
 import { DataError } from '../data/check.ts';
 import type { Track } from '../data/track.ts';
 import { parseCarParams, type CarBase, type CarParamsSchema, type ParamsOf } from '../data/car-params.ts';
+import type { SurfaceAt } from './surface.ts';
 
 const num = (min: number, max: number, integer = false) =>
   integer ? ({ type: 'number', min, max, integer } as const) : ({ type: 'number', min, max } as const);
@@ -138,6 +139,8 @@ export interface SimParams {
   car: CarParams;
   lot: Lot; // on a track only its scale (px per m) is used for drawing
   track?: Track; // the checked track; absent on the test lot (S003-T5)
+  /** Surface lookup for `track` (src/tracks/surface-at.ts); required whenever `track` is set (S003-T6). */
+  surfaceAt?: SurfaceAt;
 }
 
 export function createSimParams(car: CarParams, lot: Lot = TEST_LOT, track?: Track): SimParams {

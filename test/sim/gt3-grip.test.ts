@@ -5,13 +5,14 @@ import { describe, expect, it } from 'vitest';
 import { createCar, G, phys } from '../../src/sim/index.ts';
 import { gt3, KMH, open, s15 } from './gt3-helpers.ts';
 import type { CarParams } from '../../src/sim/index.ts';
+import { lotSurface } from '../../src/sim/surface.ts';
 
 function maxLateralG(car: CarParams, kmh: number): number {
   const p = open(car);
   const v = kmh * KMH, a = car.tirePeakSlip, dt = 1e-4;
   const s = { ...createCar(p), vx: v * Math.cos(a), vy: v * Math.sin(a), r: 0, gear: 5, rpm: 3000 };
   const vy0 = s.vy;
-  phys(s, dt, p);
+  phys(s, dt, p, lotSurface(p.lot, false));
   return Math.abs((s.vy - vy0) / dt) / G;
 }
 
