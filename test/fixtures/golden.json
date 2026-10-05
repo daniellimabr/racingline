@@ -1,32 +1,39 @@
 {
   "reasons": [
     "Baseline: the game as merged at a02dac2 (Sprint 001 port plus Sprint 002 car id, name and car switch); replaces the v24 trace comparison.",
-    "S002-T5: S15 2nd gear 1.902 -> 2.1 for more pull at low rpm (manual-shift, straight-accel and wobble use 2nd; Daniel feel-checks it)."
+    "S002-T5: S15 2nd gear 1.902 -> 2.1 for more pull at low rpm (manual-shift, straight-accel and wobble use 2nd; Daniel feel-checks it).",
+    "S002-T10: skill setting and steering wobble removed (grip fixed at the old skill-0.4 value, bit-identical to the old run with zero wobble); every state hash changes because the car has no wobble value and no random number is drawn per tick.",
+    "S002-T10 braking (state, line): no wobble, so the car ends 0.06 m and 0.7 deg of heading away from before; stop distance and speeds unchanged.",
+    "S002-T10 drift-countersteer (state, line): no wobble, so the open-loop drift ends 0.9 m away with 66.3 instead of 65.9 deg peak slip; still one drift, no spin.",
+    "S002-T10 manual-shift (state, line): no wobble, so the car ends 0.03 m and 0.1 deg of heading away; shifts and speed unchanged.",
+    "S002-T10 steady-corner (state, line): no wobble, so the car ends 0.3 m along its circle from before; speed and yaw rate unchanged.",
+    "S002-T10 straight-accel (state, line): no wobble, so the car ends 0.4 m and 0.5 deg of heading away; acceleration and shifts unchanged.",
+    "S002-T10 wobble (state, line): this straight-line scenario now runs dead straight (it was 1.6 m off line from the wobble alone); the name is kept for the v24 file."
   ],
   "scenarios": {
     "braking": {
-      "state": "68b73846460fda91",
-      "line": "5fe3a7e0d45a6a34"
+      "state": "347d3bd46b7008f1",
+      "line": "902b6e688362a3a1"
     },
     "drift-countersteer": {
-      "state": "055c9152d4cfcf14",
-      "line": "05f1ca92924a0bff"
+      "state": "63188bf019b2da1b",
+      "line": "e04e9d060ba5e25f"
     },
     "manual-shift": {
-      "state": "86122be62090db62",
-      "line": "d4461535650765c0"
+      "state": "4e550d96a236874f",
+      "line": "0aa58c7a8adadb05"
     },
     "steady-corner": {
-      "state": "c9df4a62c604034f",
-      "line": "1c6bb9f3be3c0248"
+      "state": "cebe438d374068bc",
+      "line": "2c2506b4a2e4a543"
     },
     "straight-accel": {
-      "state": "320ea2dc4aa12ce2",
-      "line": "b1972deead926108"
+      "state": "8c4f93751f83dc07",
+      "line": "1afe6b6ca297b362"
     },
     "wobble": {
-      "state": "2517c7534b7695d1",
-      "line": "c9e4a3a0be75cccd"
+      "state": "9c1925fc3bf09e2f",
+      "line": "a18956fe06a5a9c7"
     }
   }
 }

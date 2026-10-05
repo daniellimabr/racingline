@@ -1,4 +1,4 @@
-// Run setup (S002-T6): a run starts from its recorded header (seed, skill, car id). The live game
+// Run setup (S002-T6): a run starts from its recorded header (seed, car id). The live game
 // and a replay of a saved input log go through the same function, so a replay uses the recorded car.
 import type { CarRegistry } from './core/car-registry.ts';
 import { createState, replay, type ReplayResult, type SimState } from './core/sim.ts';
@@ -6,16 +6,16 @@ import type { InputLog } from './data/input-log.ts';
 import { carStep, createCar, createSimParams, type CarParams, type CarState, type SimParams } from './sim/index.ts';
 
 /** The input log header fields that decide the starting state. */
-export type RunHeader = Pick<InputLog, 'seed' | 'skill' | 'car'>;
+export type RunHeader = Pick<InputLog, 'seed' | 'car'>;
 
 export interface Run {
   params: SimParams;
   state: SimState<CarState>;
 }
 
-/** Fresh run with the header's car; throws on an unknown car id or an out-of-range skill. */
+/** Fresh run with the header's car; throws on an unknown car id. */
 export function startRun(header: RunHeader, cars: CarRegistry<CarParams>): Run {
-  const params = createSimParams(cars.get(header.car), header.skill);
+  const params = createSimParams(cars.get(header.car));
   return { params, state: createState(header.seed, createCar(params)) };
 }
 

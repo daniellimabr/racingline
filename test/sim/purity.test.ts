@@ -21,7 +21,7 @@ it('no file in src/sim uses the DOM, Math.random, Date, performance or globals',
 });
 
 it('the car step, predict and traction state leave frozen inputs untouched', () => {
-  const params = deepFreeze(createSimParams(loadCarParams(s15, 's15-drift.json'), 0.4));
+  const params = deepFreeze(createSimParams(loadCarParams(s15, 's15-drift.json')));
   let state = createState(9, createCar(params));
   const drive = { throttle: 1, brake: 0, left: 0, right: 0, shiftUp: false, shiftDown: false, toggleAuto: false };
   for (let i = 0; i < 400; i++) {

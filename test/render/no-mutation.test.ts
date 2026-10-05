@@ -42,7 +42,7 @@ it.each([
   ['s15-drift', s15],
   ['gt3', gt3],
 ])('drawing the scene, HUD and telemetry never changes the sim state (%s)', (id, json) => {
-  const params = createSimParams(loadCarParams(json, `${id}.json`), 0.4);
+  const params = createSimParams(loadCarParams(json, `${id}.json`));
   const counter = { calls: 0 };
   const ctx = stubContext(counter);
   const factory: CanvasFactory = (width, height) => ({ width, height, getContext: () => ctx });

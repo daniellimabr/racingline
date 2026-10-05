@@ -5,7 +5,7 @@ import s15 from '../../src/cars/s15-drift.json';
 
 export function secondCar(): CarParams {
   return loadCarParams(
-    { ...s15, id: 'test-car-b', name: 'Test car B', mass: 1250, peakTorque: 480, gripBase: 1.3, idleRpm: 1100 },
+    { ...s15, id: 'test-car-b', name: 'Test car B', mass: 1250, peakTorque: 480, grip: 1.34, idleRpm: 1100 },
     'test-car-b.json',
   );
 }

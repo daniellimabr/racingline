@@ -86,14 +86,13 @@ describe('switchCar', () => {
 
 describe('startRun', () => {
   test('starts a fresh run with the car named in the header', () => {
-    const run = startRun({ seed: 99, skill: 0.3, car: 'test-car-b' }, cars);
+    const run = startRun({ seed: 99, car: 'test-car-b' }, cars);
     expect(run.params.car).toBe(B);
-    expect(run.params.skill).toBe(0.3);
     expect(run.state).toEqual(createState(99, createCar(run.params)));
     expect(run.state.car.rpm).toBe(B.idleRpm);
   });
 
   test('throws on an unknown car id', () => {
-    expect(() => startRun({ seed: 1, skill: 0, car: 'nope' }, cars)).toThrow(/unknown car id "nope"/);
+    expect(() => startRun({ seed: 1, car: 'nope' }, cars)).toThrow(/unknown car id "nope"/);
   });
 });

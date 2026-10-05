@@ -20,7 +20,7 @@
   .wrap{max-width:900px;margin:0 auto;padding:16px}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
   .btn{padding:4px 12px;border-radius:var(--radius);border:0.5px solid var(--border-strong);background:var(--surface-2);color:var(--text-primary);cursor:pointer}
-  #cv:focus-visible,.btn:focus-visible,#sk:focus-visible{outline:2px solid #3a8fd9;outline-offset:2px}
+  #cv:focus-visible,.btn:focus-visible{outline:2px solid #3a8fd9;outline-offset:2px}
   .panel{background:var(--surface-1);border:0.5px solid var(--border);border-radius:12px;padding:10px 12px}
   .key{display:inline-block;width:14px;height:3px;vertical-align:middle}
 </style>
@@ -31,7 +31,6 @@
 <div style="padding:0.5rem 0">
 <canvas id="cv" width="640" height="420" tabindex="0" role="img" aria-label="Pátio de testes com o carro, a linha de trajetória projetada e o painel de instrumentos. Clique para focar e dirija com W, A, S, D." style="width:100%;border-radius:12px;display:block;outline:none;cursor:pointer"></canvas>
 <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:14px;color:var(--text-secondary)">
-<label style="display:flex;gap:8px;align-items:center">Experiência <input id="sk" type="range" min="0" max="1" step="0.05" value="0.4" aria-valuetext="40%"> <span id="skv" aria-hidden="true" style="color:var(--text-primary);min-width:32px">40%</span></label>
 <span id="car" aria-live="polite" style="color:var(--text-primary);font-weight:500">Carro: S15 Drift</span>
 <button id="ps" type="button" class="btn"><span id="pst">Pausar (P)</span></button>
 <button id="rs" type="button" class="btn">Reiniciar</button>

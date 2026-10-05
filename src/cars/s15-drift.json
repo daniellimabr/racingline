@@ -10,8 +10,7 @@
   "frontWeightMin": 0.3,
   "frontWeightMax": 0.8,
   "wheelRadius": 0.31,
-  "gripBase": 0.95,
-  "gripPerSkill": 0.1,
+  "grip": 0.99,
   "tireB": 14,
   "tireC": 1.5,
   "tirePeakSlip": 0.12,
@@ -68,9 +67,5 @@
   "autoDownRpm": 3000,
   "autoDownMaxRpm": 6500,
   "shiftTime": 0.15,
-  "shiftCooldown": 0.3,
-  "wobbleAmp": 700,
-  "wobbleDecay": 4,
-  "wobbleGain": 0.00015,
-  "wobbleSpeed": 20
+  "shiftCooldown": 0.3
 }

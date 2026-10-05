@@ -10,8 +10,6 @@ export const G = 9.81; // m/s2 (v24 g)
 export const shape = (c: CarParams, st: number): number => c.steerLinear * st + c.steerQuad * st * Math.abs(st);
 /** Speed-limited lock, rad (v24 dLim). */
 export const dLim = (c: CarParams, v: number): number => Math.max(c.steerMin, c.maxSteer / (1 + v / c.steerSpeedRef));
-/** Friction coefficient for a skill (v24 muOf). */
-export const muOf = (c: CarParams, skill: number): number => c.gripBase + c.gripPerSkill * skill;
 /** Normalized tire force for a slip angle (v24 tire). */
 export const tire = (c: CarParams, a: number): number => Math.sin(c.tireC * Math.atan(c.tireB * a));
 /** Engine torque, N m (v24 torqueAt). */
@@ -47,8 +45,8 @@ export function steer(c: CarParams, s: CarState, spd: number): number {
 
 /** One physics sub-step (v24 phys). */
 export function phys(s: CarState, dt: number, p: SimParams): void {
-  const c = p.car, skill = p.skill, L = c.wheelbase, LA = c.la, LB = c.lb;
-  const mu = muOf(c, skill) * (s.off ? p.lot.offGrip : 1), spd = Math.hypot(s.vx, s.vy);
+  const c = p.car, L = c.wheelbase, LA = c.la, LB = c.lb;
+  const mu = c.grip * (s.off ? p.lot.offGrip : 1), spd = Math.hypot(s.vx, s.vy);
   // v24 evaluates this expression twice (Aav and Afull); once is the same double.
   const Afull = (torqueAt(c, s.rpm) * ratio(c, s.gear) * c.drivelineEff) / c.wheelRadius / c.mass;
   const Aav = s.cut || s.shiftT > 0 ? 0 : Afull;
@@ -70,7 +68,7 @@ export function phys(s: CarState, dt: number, p: SimParams): void {
   const rB = mv ? Math.min(c.brakeRear * D, Gr * c.brakeLockMargin) : 0;
   const Fxr = Fdrive - dir * rB, Fxf = -dir * fL;
   const FfMax = Math.sqrt(Math.max(0, Gf * Gf - fL * fL)), GrL = Gr * latF, FrMax = Math.sqrt(Math.max(0, GrL * GrL - rB * rB));
-  const delta = steer(c, s, spd) + s.wob * (1 - skill) * c.wobbleGain * Math.min(1, spd / c.wobbleSpeed);
+  const delta = steer(c, s, spd);
   s.delta = delta;
   const ebrake =
     s.t < c.engineBrakeThrottle && !s.cut

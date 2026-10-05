@@ -16,7 +16,7 @@ const frames = scriptedLog(600);
 
 /** Plays a run live, tick by tick like the game loop, and records it as a saved input log. */
 function record(car: string): { log: InputLog; hash: string } {
-  const header = { seed: 4242, skill: 0.4, car };
+  const header = { seed: 4242, car };
   const run = startRun(header, cars);
   let state = run.state;
   for (const f of frames) state = step(state, f, run.params, carStep);
