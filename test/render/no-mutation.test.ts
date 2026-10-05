@@ -11,6 +11,7 @@ import { buildLot, type CanvasFactory } from '../../src/render/lot.ts';
 import { drawScene } from '../../src/render/scene.ts';
 import { drawTelemetry } from '../../src/render/telemetry.ts';
 import { createView, recordTick } from '../../src/render/view.ts';
+import { carHud } from '../../src/ui/hud-car.ts';
 import { deepFreeze } from '../core/helpers.ts';
 
 /** Canvas 2D stand-in: every method is a counted no-op, properties store what is written. */
@@ -55,7 +56,7 @@ it.each([
     recordTick(view, state.car, params, 1 / 60);
     if (i % 20 === 0) {
       drawScene(ctx, { car: state.car, params, view, lot, paused: i % 40 === 0, dt: 1 / 60 });
-      drawTelemetry(ctx, view, state.car.tt, i % 40 === 0);
+      drawTelemetry(ctx, view, state.car.tt, i % 40 === 0, carHud(params.car).rpmScale);
       checked++;
     }
     expect(hashState(state), `tick ${i}`).toBe(before);
