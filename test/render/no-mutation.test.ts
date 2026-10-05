@@ -14,7 +14,7 @@ import { createView, recordTick } from '../../src/render/view.ts';
 import { carHud } from '../../src/ui/hud-car.ts';
 import { buildTrackArt } from '../../src/render/track.ts';
 import { createCarRegistry } from '../../src/core/car-registry.ts';
-import { startTrackRun } from '../../src/ui/track-run.ts';
+import { startRun } from '../../src/run.ts';
 import type { LapProgress } from '../../src/ui/hud-lap.ts';
 import { deepFreeze } from '../core/helpers.ts';
 
@@ -85,9 +85,9 @@ it.each([
   ['s15-drift', 'lot'],
 ])('drawing the scene on a track never changes the sim state (%s on %s)', (car, trackId) => {
   const cars = createCarRegistry([loadCarParams(s15, 's15-drift.json'), loadCarParams(gt3, 'gt3.json')]);
-  const run = startTrackRun({ seed: 3, car, track: trackId }, cars);
+  const run = startRun({ seed: 3, car, track: trackId }, cars);
   const params = deepFreeze(run.params);
-  const art = run.track ? deepFreeze(buildTrackArt(run.track, params.lot.scale)) : null;
+  const art = params.track ? deepFreeze(buildTrackArt(params.track, params.lot.scale)) : null;
   expect(art !== null).toBe(trackId !== 'lot');
   const counter = { calls: 0 };
   const ctx = stubContext(counter);
@@ -95,7 +95,7 @@ it.each([
   const lot = buildLot(factory, params.lot);
   const view = createView(7);
   let state = deepFreeze(run.state);
-  if (art) expect([state.car.x, state.car.y, state.car.h]).toEqual([run.track!.spawn.x, run.track!.spawn.y, run.track!.spawn.h]);
+  if (art) expect([state.car.x, state.car.y, state.car.h]).toEqual([params.track!.spawn.x, params.track!.spawn.y, params.track!.spawn.h]);
   for (let i = 0; i < 430; i++) {
     state = deepFreeze(step(state, frameAt(i), params, carStep));
     const before = hashState(state);

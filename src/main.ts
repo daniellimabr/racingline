@@ -4,7 +4,7 @@ import { advance } from './core/accumulator.ts';
 import { createCarRegistry, switchCar } from './core/car-registry.ts';
 import { step, TICK, type SimState } from './core/sim.ts';
 import { KeyboardDevice } from './input/index.ts';
-import { carStep, createSimParams, loadCarParams, type CarState, type DriftRecord } from './sim/index.ts';
+import { carStep, createSimParams, lapProgress, loadCarParams, type CarState, type DriftRecord } from './sim/index.ts';
 import { buildLot, type LotArt } from './render/lot.ts';
 import { drawScene } from './render/scene.ts';
 import { drawTelemetry } from './render/telemetry.ts';
@@ -12,10 +12,8 @@ import { createView, recordTick, type View } from './render/view.ts';
 import { analysisHtml, driftTableHtml } from './ui/drifts.ts';
 import { carHud, rpmLegend } from './ui/hud-car.ts';
 import { buildTrackArt, type TrackArt } from './render/track.ts';
-import { TRACKS } from './tracks/index.ts';
-import { bindTrackChooser, LOT_ID, trackOptions } from './ui/track-chooser.ts';
-// Stand-in for Back End's track run setup and lap reader until S003-T5 merges (see the file header).
-import { lapProgress, startTrackRun } from './ui/track-run.ts';
+import { bindTrackChooser } from './ui/track-chooser.ts';
+import { LOT_TRACK_ID, startRun, TRACK_CHOICES } from './run.ts';
 
 function byId<T extends HTMLElement>(id: string, type: new () => T): T {
   const el = document.getElementById(id);
@@ -44,7 +42,7 @@ const makeCanvas = (w: number, h: number) => Object.assign(document.createElemen
 let lot: LotArt = buildLot(makeCanvas, params.lot);
 const seed = () => crypto.getRandomValues(new Uint32Array(1))[0]!;
 
-let trackId = LOT_ID, art: TrackArt | null = null;
+let trackId = LOT_TRACK_ID, art: TrackArt | null = null;
 const arts = new Map<string, TrackArt>(); // track drawing data, built once per track
 const LOT_LABEL = cv.getAttribute('aria-label') ?? '';
 
@@ -59,9 +57,8 @@ function renderDrifts(drifts: readonly DriftRecord[]): void {
 
 /** v24 reset(): new car and empty histories; the chosen car and track are kept. */
 function reset(): void {
-  const run = startTrackRun({ seed: seed(), car: carId, track: trackId }, cars);
-  ({ state, params } = run);
-  const track = run.track;
+  ({ state, params } = startRun({ seed: seed(), car: carId, track: trackId }, cars));
+  const track = params.track;
   art = track ? arts.get(track.id) ?? arts.set(track.id, buildTrackArt(track, params.lot.scale)).get(track.id)! : null;
   cv.setAttribute('aria-label', track
     ? `Pista ${track.name} com o carro, a linha de trajetória projetada, os tempos de volta e o painel de instrumentos. Dados do mapa: ${track.credit}. Clique ou use Tab para focar e dirija com W, A, S, D.`
@@ -106,7 +103,7 @@ byId('rs', HTMLButtonElement).addEventListener('click', () => {
   reset();
   cv.focus();
 });
-bindTrackChooser(byId('tk', HTMLButtonElement), trackOptions(TRACKS), trackId, (id) => {
+bindTrackChooser(byId('tk', HTMLButtonElement), TRACK_CHOICES, trackId, (id) => {
   trackId = id;
   reset();
   cv.focus();

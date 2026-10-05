@@ -34,6 +34,8 @@ const LOG_KEYS = ['version', 'seed', 'car', 'tickSeconds', 'subSteps', 'frames']
 const V24_LOG_KEYS = [...LOG_KEYS, 'skill'] as const;
 const V1_GONE =
   'input log version 1 is no longer supported: it carries the removed skill setting and would not replay the same; record the run again';
+/** Same rule as track file ids (src/data/track.ts); "lot" names the test lot. */
+const TRACK_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const AXES = ['throttle', 'brake', 'left', 'right'] as const;
 const BUTTONS = ['shiftUp', 'shiftDown', 'toggleAuto'] as const;
 const FRAME_KEYS = [...AXES, ...BUTTONS];
@@ -61,7 +63,9 @@ export function checkInputLog(c: Checker, v: unknown, path: string, v24 = false)
   if (has('seed')) c.number(v['seed'], `${path}.seed`, { min: 0, max: UINT32_MAX, integer: true });
   if (v24 && has('skill')) c.number(v['skill'], `${path}.skill`, { min: 0, max: 1 });
   if (has('car')) c.string(v['car'], `${path}.car`);
-  if (!v24 && has('track')) c.string(v['track'], `${path}.track`);
+  if (!v24 && has('track') && c.string(v['track'], `${path}.track`) && !TRACK_ID.test(v['track'])) {
+    c.fail(`${path}.track`, `expected a track id in lowercase letters, digits and single dashes (like "interlagos"), got ${JSON.stringify(v['track'])}`);
+  }
   if (has('tickSeconds') && c.number(v['tickSeconds'], `${path}.tickSeconds`)) {
     c.equals(v['tickSeconds'], TICK_SECONDS, `${path}.tickSeconds`, 'tick length');
   }
