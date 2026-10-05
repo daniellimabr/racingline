@@ -5,6 +5,7 @@ import type { InputFrame } from '../core/input-frame.ts';
 import type { CarStep } from '../core/sim.ts';
 import { trackDrift, DRIFT_BETA } from './drift.ts';
 import { engine, manualShift } from './engine.ts';
+import { allWheelsOff, createLapState, lapStep } from './laps.ts';
 import { phys } from './physics.ts';
 import type { SimParams } from './params.ts';
 import type { CarState } from './state.ts';
@@ -69,7 +70,9 @@ export const carStep: CarStep<CarState, SimParams> = (car, input, p, ctx) => {
   sim(s, dt, input, p, ctx.substeps);
   s.tt += dt;
   const L = p.lot, px = s.x * L.scale, py = s.y * L.scale;
-  s.off = px < L.x0 || px > L.x1 || py < L.y0 || py > L.y1;
+  // On a track, off means all four wheels off the road (the off-track rule) until T6 reads surfaces per axle.
+  s.off = p.track ? allWheelsOff(p.track, s, c) : px < L.x0 || px > L.x1 || py < L.y0 || py > L.y1;
   trackDrift(s, dt);
+  if (p.track) s.lap = lapStep(car.lap ?? createLapState(p.track), car, s, p.track, c);
   return s;
 };

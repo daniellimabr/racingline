@@ -1,5 +1,6 @@
 // Car state: v24's S object as plain JSON (same field names, so traces compare one to one),
 // plus the drift tracker that v24 kept in the page globals `cur` and `drifts`.
+import type { LapState } from './laps.ts';
 import type { SimParams } from './params.ts';
 
 /** v24 S.mode: grip, front sliding, rear sliding, drift, spin. Index order matches the trace files. */
@@ -65,6 +66,7 @@ export interface CarState {
   gear: number; auto: boolean; rpm: number; cut: boolean; shiftT: number; shiftCd: number; groundRpm: number;
   cur: DriftRun | null; // current drift, if any
   drifts: DriftRecord[]; // last 10 finished drifts, newest first
+  lap?: LapState; // lap timing, only on a track (absent on the test lot, so lot states hash as before)
 }
 
 /** v24 reset(). */

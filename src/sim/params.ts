@@ -2,6 +2,7 @@
 // run settings (lot). Each field: unit · v24 source · confidence. "spec" = real S15 figure,
 // "tuned" = Daniel tuned it by feel in v24 (keep unless he decides otherwise), "model" = model shape.
 import { DataError } from '../data/check.ts';
+import type { Track } from '../data/track.ts';
 import { parseCarParams, type CarBase, type CarParamsSchema, type ParamsOf } from '../data/car-params.ts';
 
 const num = (min: number, max: number, integer = false) =>
@@ -135,9 +136,10 @@ export const TEST_LOT: Lot = Object.freeze({
 /** Everything the car step reads besides state and input (the skill setting was removed in S002-T10). */
 export interface SimParams {
   car: CarParams;
-  lot: Lot;
+  lot: Lot; // on a track only its scale (px per m) is used for drawing
+  track?: Track; // the checked track; absent on the test lot (S003-T5)
 }
 
-export function createSimParams(car: CarParams, lot: Lot = TEST_LOT): SimParams {
-  return { car, lot };
+export function createSimParams(car: CarParams, lot: Lot = TEST_LOT, track?: Track): SimParams {
+  return track === undefined ? { car, lot } : { car, lot, track };
 }
