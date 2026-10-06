@@ -46,6 +46,11 @@ export const CAR_SCHEMA = {
   steerCasterShare: num(0, 1), // share of the aligning trail that is mechanical caster, kept when the front slides · 0.3 (road and race cars run roughly 20-30% caster trail against 70-80% tyre trail at small slip) · model, low confidence
   steerTrailFade: num(1, 5), // front slip, in multiples of tirePeakSlip, where the tyre's own trail is gone, so the aligning torque peaks before the side force does · 2 · model, medium confidence
   steerReturnMaxShare: num(0.01, 1), // the return never turns the wheel faster than this share of the key rate at the current speed, so it stays slow at speed; at 1 it binds only on the GT3 around 200 km/h (downforce), never at low speed · 1 · tuned (S005-T2, Main Dev option B)
+  // S005-T3 (Main Dev option 1B): while the car slides, a released wheel returns to centre at a share of the key speed,
+  // whatever the front slip, standing in for the caster pulling a free wheel quickly in a slide; the slow tyre return
+  // above stays for normal driving. Without it a keyboard catch released at the right moment spun the S15 the other way.
+  steerSlideBeta: num(0, 1.5), // rad, body slip above which the car counts as sliding for the steering return (rear slip past tirePeakSlip also counts) � 0.1 � tuned (S005-T3, Main Dev option 1B)
+  steerSlideShare: num(0, 1), // share of the key rate at the current speed for that slide return; 0 = off (only the tyre return) � 1 � tuned (S005-T3, Main Dev option 1B)
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned
   brakeRise: num(0.01, 100), // 1/s · sim() 1.1 · tuned

@@ -32,8 +32,12 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   const free = !(k.left > 0) && !(k.right > 0), h = dt / substeps;
   for (let i = 0; i < substeps; i++) {
     const fy = phys(s, h, p, surf);
-    if (free && s.st !== 0 && s.af * s.st < 0) {
-      const d = Math.min(centreRate(c, fy, s.af), c.steerReturnMaxShare / steerLockTime(c, s.v)) * h;
+    // S005-T3 (Main Dev option 1B): while the car slides, the released wheel goes to centre at steerSlideShare of the key
+    // rate whatever the front slip, so a caught slide does not leave countersteer on that swings it into the other spin.
+    const slide = Math.abs(s.beta) > c.steerSlideBeta || Math.abs(s.ar) > c.tirePeakSlip;
+    if (free && s.st !== 0 && ((slide && c.steerSlideShare > 0) || s.af * s.st < 0)) {
+      const tyre = s.af * s.st < 0 ? Math.min(centreRate(c, fy, s.af), c.steerReturnMaxShare / steerLockTime(c, s.v)) : 0;
+      const d = Math.max(tyre, slide ? c.steerSlideShare / steerLockTime(c, s.v) : 0) * h;
       s.st = s.st > 0 ? Math.max(0, s.st - d) : Math.min(0, s.st + d);
     }
   }

@@ -87,19 +87,24 @@ describe('the return grows with speed and is nothing when parked (S005-AC-02)', 
 });
 
 describe('the return is weaker while the front tyres slide (S005-AC-03)', () => {
+  const FRONT_ONLY: Record<string, string[]> = { 's15-drift': ['50/-1', '100/-1'], gt3: ['50/-1'] };
   /**
    * Same speed, same steering, released: the car is set with a yaw rate that puts the front slip at `k` times the
-   * tyre peak (no body slip, so no countersteer lock). Returns the steering travel in the first tick, per second.
+   * tyre peak (no body slip, so no countersteer lock). Returns the steering travel in the first tick, per second, and
+   * whether the rear slip is past its peak (then the car counts as sliding and the slide return of S005-T3 acts).
    */
-  function firstRate(c: CarParams, kmh: number, st0: number, k: number): number {
+  function firstTick(c: CarParams, kmh: number, st0: number, k: number): { rate: number; rearSlides: boolean } {
     const { s, p } = at(c, kmh), V = kmh * KMH, delta = steer(c, { ...s.car, st: st0, beta: 0 }, V);
     const r = (V * Math.tan(delta - k * c.tirePeakSlip * Math.sign(st0))) / c.la;
     const after = tick({ ...s, car: { ...s.car, st: st0, r } }, p, {});
-    return (Math.abs(st0) - Math.abs(after.car.st)) * HZ;
+    return { rate: (Math.abs(st0) - Math.abs(after.car.st)) * HZ, rearSlides: Math.abs(Math.atan2(-c.lb * r, V)) > c.tirePeakSlip };
   }
+  /** The tyre-driven return alone (slide return off), as AC-03 compares it. */
+  const firstRate = (c: CarParams, kmh: number, st0: number, k: number): number => firstTick({ ...c, steerSlideShare: 0 }, kmh, st0, k).rate;
 
   // S005-AC-03 as amended by Main Dev (option B): sliding pulls less, except where the cap (never faster than the key)
-  // holds both to the same rate. With today's data that happens only on the GT3 at 200 km/h.
+  // holds both to the same rate. With today's data that happens only on the GT3 at 200 km/h. Amended again (S005-T3,
+  // option 1B): except while the car slides, so this compares a front slide with the car itself not sliding.
   it.each(cars)('%s: a front slipping 2.5x past its peak pulls back far less than one gripping at 0.7x, unless both are capped', (_n, car) => {
     const c = car(), capped: string[] = [];
     for (const kmh of [50, 100, 200]) for (const st0 of [0.5, -1]) {
@@ -118,6 +123,18 @@ describe('the return is weaker while the front tyres slide (S005-AC-03)', () => 
     expect([...new Set(capped)], 'speeds where the cap holds both').toEqual(c.id === 'gt3' ? ['200'] : []);
   });
 
+  // S005-T3 (option 1B): with the slide return on, the weaker sliding pull is only kept where the front slides and the
+  // car does not (rear under its peak, no body slip); where the rear slides too the slide return pulls at the key speed.
+  it.each(cars)('%s: a front-only slide keeps the weaker tyre pull with the slide return on', (_n, car) => {
+    const c = car(), frontOnly: string[] = [];
+    for (const kmh of [50, 100, 200]) for (const st0 of [0.5, -1]) {
+      const on = firstTick(c, kmh, st0, 2.5), off = firstRate(c, kmh, st0, 2.5);
+      if (on.rearSlides) expect(on.rate, `${kmh} km/h ${st0}: the rear slides too (equal where the key cap already holds)`).toBeGreaterThanOrEqual(off);
+      else { frontOnly.push(`${kmh}/${st0}`); expect(on.rate, `${kmh} km/h ${st0}`).toBe(off); }
+    }
+    expect(frontOnly, 'speeds/steering with a front-only slide in this setup').toEqual(FRONT_ONLY[c.id]);
+  });
+
   it('the S15 front slides at full lock from 50 km/h, and that full-lock release starts slower than half lock', () => {
     const c = s15();
     for (const kmh of [50, 100, 200]) {
@@ -128,8 +145,9 @@ describe('the return is weaker while the front tyres slide (S005-AC-03)', () => 
   });
 
   it('less front grip pulls the wheel back more slowly (half the grip)', () => {
-    const slick = loadCarParams({ ...s15Json, grip: 0.5 }, 'test.json');
-    expect(release(slick, 100, 0.5).t).toBeGreaterThan(release(s15(), 100, 0.5).t);
+    // The tyre-driven return only: with half the grip the car slides at half lock, which would start the slide return (S005-T3).
+    const slick = loadCarParams({ ...s15Json, grip: 0.5, steerSlideShare: 0 }, 'test.json'), base = loadCarParams({ ...s15Json, steerSlideShare: 0 }, 'test.json');
+    expect(release(slick, 100, 0.5).t).toBeGreaterThan(release(base, 100, 0.5).t);
   });
 
   it('the return strength is read from the car file, and zero gain keeps the wheel where it is', () => {
@@ -173,5 +191,47 @@ describe('the return is never quicker than the key (Main Dev option B, S005-T2)'
   it('the cap is validated car data', () => {
     for (const bad of [{ steerReturnMaxShare: 0 }, { steerReturnMaxShare: 1.5 }, { steerReturnMaxShare: 'half' }])
       expect(() => loadCarParams({ ...s15Json, ...bad }, 'test.json'), JSON.stringify(bad)).toThrow(DataError);
+  });
+});
+
+describe('while the car slides a released wheel returns at the key speed (S005-T3, Main Dev option 1B)', () => {
+  /** Released at st0 with the car sliding (body slip `beta`, rad, opposite the steering is not needed): first-tick travel per second. */
+  function slideRate(c: CarParams, kmh: number, st0: number, beta: number, rearSlip = 0): { rate: number; key: number } {
+    const { s, p } = at(c, kmh), V = kmh * KMH, vy = V * Math.tan(beta), r = rearSlip ? (vy - V * Math.tan(rearSlip)) / c.lb : 0;
+    const after = tick({ ...s, car: { ...s.car, st: st0, vx: V, vy, beta: Math.atan2(vy, V), r } }, p, {});
+    // The key rate at the car's speed (forward and sideways), checked at the start and the end of the tick.
+    const key = c.steerSlideShare / Math.min(steerLockTime(c, Math.hypot(V, vy)), steerLockTime(c, after.car.v));
+    return { rate: (Math.abs(st0) - Math.abs(after.car.st)) * HZ, key };
+  }
+
+  it.each(cars)('%s: body slip past steerSlideBeta or rear slip past the peak: the key speed, towards centre', (_n, car) => {
+    const c = car();
+    for (const kmh of [60, 120, 180]) for (const st0 of [0.8, -0.6]) {
+      const body = slideRate(c, kmh, st0, Math.sign(st0) * 0.3), rear = slideRate(c, kmh, st0, 0, -Math.sign(st0) * 2 * c.tirePeakSlip);
+      for (const [n, x] of [['body slip', body], ['rear slip', rear]] as const) {
+        expect(x.rate, `${kmh} km/h ${st0} ${n}`).toBeGreaterThan(0.9 * x.key);
+        expect(x.rate, `${kmh} km/h ${st0} ${n}`).toBeLessThanOrEqual(x.key * (1 + 1e-6));
+      }
+    }
+  });
+
+  it('never moves the wheel past centre, and a held key still wins', () => {
+    const c = s15(), { s, p } = at(c, 120), V = 120 * KMH, vy = V * Math.tan(0.3);
+    let x: S = { ...s, car: { ...s.car, st: 0.05, vx: V, vy, beta: 0.3 } };
+    for (let i = 0; i < 30; i++) { x = tick(x, p, {}); expect(x.car.st).toBeGreaterThanOrEqual(0); }
+    const k = tick({ ...s, car: { ...s.car, st: 0.5, vx: V, vy, beta: 0.3 } }, p, { right: 1 });
+    expect(k.car.st).toBeGreaterThan(0.5);
+  });
+
+  it('the slide threshold and the rate share are validated car data; share 0 turns the slide return off', () => {
+    for (const bad of [{ steerSlideBeta: -0.1 }, { steerSlideBeta: 2 }, { steerSlideShare: 1.5 }, { steerSlideShare: 'fast' }])
+      expect(() => loadCarParams({ ...s15Json, ...bad }, 'test.json'), JSON.stringify(bad)).toThrow(DataError);
+    const { steerSlideBeta: _drop, ...missing } = s15Json;
+    expect(() => loadCarParams(missing, 'test.json')).toThrow(/steerSlideBeta/);
+    const off = loadCarParams({ ...s15Json, steerSlideShare: 0 }, 'test.json'), on = s15();
+    const { s, p } = at(off, 120), V = 120 * KMH, vy = V * Math.tan(0.3), st = { ...s.car, st: 0.8, vx: V, vy, beta: 0.3 };
+    const a = tick({ ...s, car: st }, p, {}), b = tick({ ...s, car: st }, open(on), {});
+    expect(0.8 - a.car.st).toBeLessThan(0.8 - b.car.st);
+    expect(0.8 - a.car.st, 'only the slow tyre return is left').toBeLessThan(0.2 / steerLockTime(on, V) / HZ);
   });
 });

@@ -66,7 +66,7 @@ describe('spin record before and after the S003 fix (S003-AC-01)', () => {
     it('GT3 at 100 km/h with 0.5 s of steering no longer spins (before: 871 deg, 6.8 s)', () => {
       const o = brakeTurn(gt3(), 100, true, 0.5);
       expect(o.spun).toBe(false);
-      near(o.yaw, 10.7); // S004-T11: 29.2 deg before GT3 load sensitivity; S003: 10.5 deg with self-centring
+      near(o.yaw, 7.5); // S005-T3: 10.7 deg before GT3 brakes 0.6/0.4 -> 0.68/0.32; S004-T11: 29.2 deg before GT3 load sensitivity; S003: 10.5 deg with self-centring
     });
 
     it('0.5 s of steering at 150 km/h no longer slides either car (S003: one spin each)', () => {
@@ -79,7 +79,7 @@ describe('spin record before and after the S003 fix (S003-AC-01)', () => {
       const gh = brakeTurn(gt3(), 150, true, 0.5), gr = brakeTurn(gt3(), 150, false, 0.5);
       expect(gh.spun || gr.spun).toBe(false);
       expect(gh.slide + gr.slide).toBe(0);
-      near(gh.yaw, 5.8); // S004-T11: 15.1 deg before GT3 load sensitivity; before S003 2856 deg
+      near(gh.yaw, 3.9); // S005-T3: 5.8 deg before GT3 brakes 0.68/0.32; S004-T11: 15.1 deg before GT3 load sensitivity; before S003 2856 deg
     });
   });
 
