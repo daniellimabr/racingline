@@ -1,6 +1,7 @@
 // Main canvas (v24 draw(), wheel(), drawDiagram(), drawTach(), lines 206-282). Reads the car and the
 // sim's view helpers (predict, tractionState); never writes sim state. UI text is Portuguese, as in v24.
 import { predict, tractionState, type CarState, type SimParams } from '../sim/index.ts';
+import { dLim } from '../sim/physics.ts';
 import { carHud, gearText } from '../ui/hud-car.ts';
 import { carLook } from './car-look.ts';
 import { drawMiniDot, grassTiles, lotMiniDot, LOT_MINI, WORLD_W, type LotArt } from './lot.ts';
@@ -458,12 +459,17 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   c.fillRect(154, 338, 114 * s.b, 9);
   c.fillStyle = '#fff';
   c.fillRect(24 + 118 * s.lim - 1, 334, 2, 17);
-  // Steering bar: the sim's steering state (s.st), so it follows the wheel back to centre, never the key.
-  const SB = STEER_BAR, mid = SB.x + SB.w / 2, sw = (s.st * SB.w) / 2;
+  // Steering bar: the angle the road wheels really have (the sim's delta) as a share of the speed's lock, so it is at
+  // centre whenever the sim holds the wheels straight (S005-T13 m3); the steering travel (s.st) is a faint mark.
+  const SB = STEER_BAR, mid = SB.x + SB.w / 2, share = Math.max(-1, Math.min(1, s.delta / dLim(p.car, s.v))), sw = (share * SB.w) / 2;
   c.fillStyle = '#2c3646';
   c.fillRect(SB.x, SB.y, SB.w, SB.h);
   c.fillStyle = '#ffc83d';
   c.fillRect(Math.min(mid, mid + sw), SB.y, Math.abs(sw), SB.h);
+  if (s.st !== 0) {
+    c.fillStyle = 'rgba(255,200,61,0.45)';
+    c.fillRect(mid + (s.st * SB.w) / 2 - 1, SB.y - 2, 2, SB.h + 4);
+  }
   c.fillStyle = '#d6dbe3';
   c.fillRect(145, 354, 2, 14);
   c.fillStyle = '#8a93a3';
