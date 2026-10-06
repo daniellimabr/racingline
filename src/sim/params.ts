@@ -126,12 +126,12 @@ export interface Lot {
   startX: number; // reset() position, px
   startY: number;
   offGrip: number; // friction factor off the lot · 0.55
-  offDrag: number; // extra drag per m/s off the lot, 1/s · 0.8
+  offDrag: number; // extra drag per m/s off the lot, 1/s · 0.08, the same grass as Interlagos (Daniel 2026-10-05, S003-T12 option 2A; was 0.8)
 }
 
-/** v24's test lot (prototype lines 59 and 78, phys() off-lot terms). */
+/** v24's test lot (prototype lines 59 and 78, phys() off-lot terms); since S003-T12 its outside is Interlagos grass. */
 export const TEST_LOT: Lot = Object.freeze({
-  scale: 9, x0: 100, y0: 100, x1: 2300, y1: 1700, startX: 400, startY: 900, offGrip: 0.55, offDrag: 0.8,
+  scale: 9, x0: 100, y0: 100, x1: 2300, y1: 1700, startX: 400, startY: 900, offGrip: 0.55, offDrag: 0.08,
 });
 
 /** Everything the car step reads besides state and input (the skill setting was removed in S002-T10). */
