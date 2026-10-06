@@ -69,17 +69,16 @@ describe('the released wheel returns to centre slowly (S005-AC-01)', () => {
 });
 
 describe('the return grows with speed and is nothing when parked (S005-AC-02)', () => {
-  // S005-AC-02 as reworded by Main Dev (S005-T8): faster at 100 than 50 km/h; at 200 km/h no faster than the key (the
+  // S005-AC-02 as reworded by Main Dev (S005-T8, S005-T10): at 100 km/h within 0.5 s of 50 km/h; at 200 km/h no faster than the key (the
   // cap test below) and slower near centre, so key taps build up; below 3 km/h the angle moves less than 0.05 in 2 s.
-  // S005-T10 (option 2A): the geometry return made 50 km/h quicker (S15 3.8 -> 2.0 s from full lock), so 100 km/h is now
-  // a little slower than 50 km/h (full lock S15 2.17 vs 2.00 s, GT3 2.08 vs 1.95 s; half lock GT3 1.77 vs 1.30 s). Main
-  // Dev's reworded rule ("not slower at 100 than at 50 km/h") is not met by that margin; this pins the measured margin
-  // until Main Dev rules on it (reported in the round 2 conversation).
-  it.each(cars)('%s: 100 km/h is at most 0.5 s slower than 50 km/h, from full and half lock', (_n, car) => {
+  // S005-AC-02 as reworded by Main Dev (S005-T10): the full-lock return at 100 km/h is within 0.5 s of the time at 50 km/h.
+  // Option 2A made 50 km/h quicker (S15 3.8 -> 2.0 s), so 100 km/h is now a little slower (full lock S15 2.17 vs 2.00 s,
+  // GT3 2.08 vs 1.95 s); the same 0.5 s gap is also kept from half lock (GT3 1.77 vs 1.30 s).
+  it.each(cars)('%s: the return at 100 km/h is within 0.5 s of 50 km/h, from full and half lock', (_n, car) => {
     const c = car();
     for (const st0 of [1, 0.5]) {
       const t = [50, 100].map((kmh) => release(c, kmh, st0).t);
-      expect(t[1]! - t[0]!, `${st0}: 100 vs 50 km/h, s`).toBeLessThan(0.5);
+      expect(Math.abs(t[1]! - t[0]!), `${st0}: 100 vs 50 km/h, s`).toBeLessThan(0.5);
     }
   });
 
