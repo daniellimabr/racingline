@@ -75,6 +75,8 @@ describe('a held key is never fought by the return (S005-AC-04)', () => {
     }
   });
 
+  // S005-T13 m3: the line now curves by the road-wheel angle (delta) rather than the key position, so the comparison holds
+  // the earlier wheel angle instead of the earlier key position.
   it('the racing line assumes the current steering is held, so it follows the wheel as it returns', () => {
     const p = open(s15());
     const { s } = drive(p, rolling(p, 40), right, (c) => c.st >= 0.3, 5);
@@ -86,7 +88,7 @@ describe('a held key is never fought by the return (S005-AC-04)', () => {
     for (let i = 0; i < HZ; i++) after = step(after, idle, p, carStep);
     expect(after.car.st).toBeLessThan(s.car.st);
     expect(bend(after.car)).toBeGreaterThan(0);
-    expect(bend(after.car)).toBeLessThan(bend({ ...after.car, st: s.car.st }));
+    expect(bend(after.car)).toBeLessThan(bend({ ...after.car, delta: s.car.delta }));
   });
 });
 
