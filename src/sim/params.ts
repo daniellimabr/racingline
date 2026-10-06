@@ -60,8 +60,9 @@ export const CAR_SCHEMA = {
   steerReturnRampFrom: num(0, 100), // m/s, below this the wheel stays put (walking pace, S005-AC-02) · 0.833 = 3 km/h · tuned (S005-T10)
   steerReturnMinSpeed: num(0, 100), // m/s, speed from which the minimum and geometry returns act in full (must be above steerReturnRampFrom) · 5 = 18 km/h (S005-T8 had a step at 20 km/h) · tuned (S005-T10 option 2A)
   steerGeometryGain: num(0, 20), // share of full travel per second at full lock that the steering geometry (caster and kingpin lifting the car) returns, times the speed-limited lock share dLim / maxSteer, so it fades with speed; 0 = off · 2 (full lock back in about 1.3-2.2 s at 10-50 km/h, both cars) · tuned (S005-T10 option 2A)
-  // S005-T10 (Main Dev option 1B): catch hold; while the key that caught a slide is held (and until the released wheel is
-  // back at centre) the front wheels point at most along the direction of travel, so a held countersteer cannot spin the car.
+  // S005-T10 (Main Dev option 1B), S005-T12 (option 3A): catch hold; after a key catches a slide the front wheels point at
+  // most along the direction of travel until the car settles, then a key held on that side brings the lock back at the key rate.
+  steerCatchSettleYaw: num(0, 5), // rad/s, the catch hold keeps catching while the car still rotates back towards the caught side faster than this · 0.1 (about 6 deg/s) · tuned (S005-T12)
   steerCatchHold: num(0, 1), // share of the catch hold, 1 = full, 0 = off · 1 (S15 tester catch released 0-0.2 s after the slide closes: 0-4 deg the other way, was a spin) · tuned (S005-T10 option 1B)
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned

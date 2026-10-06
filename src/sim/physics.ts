@@ -56,10 +56,11 @@ export function steer(c: CarParams, s: CarState, spd: number): number {
   // the wheel is back at centre (s.hold, car.ts), the front wheels point at most along the direction of travel, less the
   // part from the car already rotating back towards the steering (front lever x yaw rate / speed). Once the slide has
   // closed that is straight ahead, so a countersteer held on can no longer throw the car into the opposite spin.
+  // S005-T12: once the car has settled the cap opens (holdOpen) at the key rate while that key is held.
   if (s.hold && c.steerCatchHold > 0 && s.st !== 0 && Math.sign(s.st) === Math.sign(s.hold)) {
     const k = Math.sign(s.st), back = (Math.max(0, k * s.r) * c.la) / Math.max(spd, 1);
     const cap = Math.max(0, k * s.beta - back);
-    d = k * (Math.abs(d) - c.steerCatchHold * Math.max(0, Math.abs(d) - cap));
+    d = k * (Math.abs(d) - c.steerCatchHold * (1 - (s.holdOpen ?? 0)) * Math.max(0, Math.abs(d) - cap));
   }
   return d;
 }

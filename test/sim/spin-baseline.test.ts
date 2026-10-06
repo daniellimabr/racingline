@@ -86,7 +86,9 @@ describe('spin record before and after the S003 fix (S003-AC-01)', () => {
   describe('lifting off at the grip limit, steering brought back to centre (S004-T2; S003 used full lock)', () => {
     it.each([
       // S004-T11 values; S005-T2: S15 120 km/h 3.0 -> 2.4 deg (between the corner's key taps the wheel now eases back a little).
-      ['S15', 120, s15, 2.4], ['S15', 200, s15, 1.2], ['GT3', 120, gt3, 11.1], ['GT3', 200, gt3, 10.5],
+      // S005-T13 m3: GT3 120 km/h 11.1 -> 8.2 deg (the scripted hand keys until the line reports slip, and the line now uses the
+      // real wheel angle, so it settles on a slightly different grip-limit corner; still no spin, no slide).
+      ['S15', 120, s15, 2.4], ['S15', 200, s15, 1.2], ['GT3', 120, gt3, 8.2], ['GT3', 200, gt3, 10.5],
     ] as const)('%s at %i km/h holds its line (rotation about %s deg)', (_n, kmh, car, yaw) => {
       const o = liftOff(car(), kmh, true, 'centre');
       expect(o.spun).toBe(false);
