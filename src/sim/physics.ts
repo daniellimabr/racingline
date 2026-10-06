@@ -52,8 +52,24 @@ export function steer(c: CarParams, s: CarState, spd: number): number {
   return d;
 }
 
-/** One physics sub-step (v24 phys) on the given surface under each axle (surface.ts). */
-export function phys(s: CarState, dt: number, p: SimParams, surf: AxleSurface): void {
+/**
+ * Speed (share of full steering travel per second) at which the released wheel turns back towards centre
+ * (S005-T2): the front tyres' self-aligning torque (side force x trail) against the steering's damping. A damped
+ * steering with negligible inertia turns at torque / damping, a first-order move that cannot oscillate. fyf is the
+ * front side force (m/s2 per unit mass, any sign), af the front slip angle (rad). The trail is the caster part plus
+ * the tyre's own trail, which falls to zero at steerTrailFade x tirePeakSlip, so a sliding front pulls less.
+ * Speed enters through the side force: the same steering asks for more of it as speed rises (and with downforce).
+ */
+export function centreRate(c: CarParams, fyf: number, af: number): number {
+  const tyre = Math.max(0, 1 - Math.abs(af) / (c.steerTrailFade * c.tirePeakSlip));
+  return (c.steerCentreGain * Math.abs(fyf) * (c.steerCasterShare + (1 - c.steerCasterShare) * tyre)) / G;
+}
+
+/**
+ * One physics sub-step (v24 phys) on the given surface under each axle (surface.ts). Returns the front axle side
+ * force in m/s2 per unit mass (0 in the low-speed branch, where there are no slip angles), for the steering return.
+ */
+export function phys(s: CarState, dt: number, p: SimParams, surf: AxleSurface): number {
   const c = p.car, L = c.wheelbase, LA = c.la, LB = c.lb;
   // On the lot both factors are v24's `s.off ? offGrip : 1`, so the lot stays bit-identical.
   const muF = c.grip * surf.gripF, muR = c.grip * surf.gripR, spd = Math.hypot(s.vx, s.vy);
@@ -96,6 +112,7 @@ export function phys(s: CarState, dt: number, p: SimParams, surf: AxleSurface): 
   const drag = c.dragCoef * spd * spd + (mv ? c.rollingDecel + ebrake : 0) + (sDrag ? spd * sDrag : 0) + ae.drag;
   const dx = spd > 0.05 ? (-drag * s.vx) / spd : 0, dy = spd > 0.05 ? (-drag * s.vy) / spd : 0;
   const fLong = s.lockF ? c.lockUsage : (c.brakeFront * D) / Math.max(Gf, 0.1), rLong = (A + rB) / Math.max(Gr, 0.1);
+  let fy = 0;
   if (s.vx < 3 && Math.abs(s.vy) < 1.5) {
     // Low-speed kinematic branch (v24): no slip angles, lateral speed damped away.
     s.r = (s.vx * Math.tan(delta)) / L;
@@ -113,6 +130,7 @@ export function phys(s: CarState, dt: number, p: SimParams, surf: AxleSurface): 
     s.af = af;
     s.ar = ar;
     const Fyf = -FfMax * tire(c, af), Fyr = -FrMax * tire(c, ar), cd = Math.cos(delta), sd = Math.sin(delta);
+    fy = Fyf;
     const ax = Fxr + Fxf * cd - Fyf * sd + dx, ay = Fyf * cd + Fyr + Fxf * sd + dy;
     s.axp = ax;
     s.vx += (ax + s.vy * s.r) * dt;
@@ -132,4 +150,5 @@ export function phys(s: CarState, dt: number, p: SimParams, surf: AxleSurface): 
   s.rateR = (Math.max(0, s.vx) + s.spinR * c.spinWheelGain) / c.wheelRadius;
   s.wF += s.rateF * dt;
   s.wR += s.rateR * dt;
+  return fy;
 }

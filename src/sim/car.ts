@@ -7,7 +7,7 @@ import type { Track } from '../data/track.ts';
 import { trackDrift, DRIFT_BETA } from './drift.ts';
 import { engine, manualShift } from './engine.ts';
 import { allWheelsOff, createLapState, lapStep } from './laps.ts';
-import { phys, steerLockTime } from './physics.ts';
+import { centreRate, phys, steerLockTime } from './physics.ts';
 import { nextLeave, resetCar } from './reset.ts';
 import type { SimParams } from './params.ts';
 import type { CarState } from './state.ts';
@@ -25,7 +25,18 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   // S004-T2: the steering stays where it is put (no self-centring); a key moves it at a speed-dependent rate.
   const sd = (k.right > 0 ? 1 : 0) - (k.left > 0 ? 1 : 0);
   if (sd) s.st = Math.max(-1, Math.min(1, s.st + (sd * dt) / steerLockTime(c, s.v)));
-  for (let i = 0; i < substeps; i++) phys(s, dt / substeps, p, surf);
+  // S005-T2: with no steering key pressed the wheel returns towards centre, pulled by the front tyres' self-aligning
+  // torque (centreRate). It only acts while that torque points to centre (front slip opposite to the steering), never
+  // moves the wheel past centre, and never acts while a key is held, so it cannot fight the driver or overshoot.
+  // Main Dev: it is also capped at steerReturnMaxShare (1: never faster than the key) of the key rate at the current speed, so it is never a snap.
+  const free = !(k.left > 0) && !(k.right > 0), h = dt / substeps;
+  for (let i = 0; i < substeps; i++) {
+    const fy = phys(s, h, p, surf);
+    if (free && s.st !== 0 && s.af * s.st < 0) {
+      const d = Math.min(centreRate(c, fy, s.af), c.steerReturnMaxShare / steerLockTime(c, s.v)) * h;
+      s.st = s.st > 0 ? Math.max(0, s.st - d) : Math.min(0, s.st + d);
+    }
+  }
   engine(c, s, dt, surf.dragR);
   const ab = Math.abs(s.beta);
   s.mode =

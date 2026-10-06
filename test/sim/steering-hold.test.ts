@@ -1,10 +1,11 @@
-// S004-AC-01/02 (Daniel 2026-10-06): steering stays where it is put. Releasing the key holds the angle; the
-// opposite key brings it back through centre and across to the other side. There is no self-centring.
-// Scripted key input on the open lot, both cars; the keyboard still reports held 0/1.
+// S004-AC-01/02, rewritten for S005-AC-04 (Daniel 2026-10-06): a held key moves the steering at the Sprint 004
+// speed-dependent rate and nothing pulls against it; the opposite key brings it back through centre and across.
+// Releasing every key now lets the wheel return slowly to centre (S005-T2, steering-return.test.ts), so "holding"
+// here means "key held". Scripted key input on the open lot, both cars; the keyboard still reports held 0/1.
 import { describe, expect, it } from 'vitest';
 import { createState, step, type SimState } from '../../src/core/sim.ts';
 import type { InputFrame } from '../../src/core/input-frame.ts';
-import { carStep, createCar, predict, type CarState, type SimParams } from '../../src/sim/index.ts';
+import { carStep, createCar, predict, steerLockTime, type CarState, type SimParams } from '../../src/sim/index.ts';
 import { gt3, idle, KMH, open, s15 } from './gt3-helpers.ts';
 
 const HZ = 60;
@@ -29,37 +30,63 @@ function drive(p: SimParams, s0: S, keys: InputFrame, done: (c: CarState) => boo
 
 const right = { ...idle, right: 1 }, left = { ...idle, left: 1 };
 
-describe('released steering holds its angle (S004-AC-01)', () => {
-  it.each(cars)('%s: half lock to the right, released for 2 s, stays within 0.001', (_n, car) => {
-    const p = open(car());
-    const { s } = drive(p, rolling(p, 40), right, (c) => c.st >= 0.5, 5);
-    expect(s.car.st).toBeGreaterThanOrEqual(0.5);
-    const held = drive(p, s, idle, () => false, 2).st;
-    expect(held).toHaveLength(2 * HZ);
-    for (const st of held) expect(Math.abs(st - s.car.st)).toBeLessThanOrEqual(0.001);
-  });
-
-  it.each(cars)('%s: full lock stays at full lock after release, at rest and at speed', (_n, car) => {
-    for (const kmh of [0, 120]) {
+describe('a held key is never fought by the return (S005-AC-04)', () => {
+  it.each(cars)('%s: while a key is held each tick adds exactly the Sprint 004 travel, even deep in a corner', (_n, car) => {
+    for (const kmh of [40, 120, 200]) {
       const p = open(car());
-      const { s } = drive(p, rolling(p, kmh), left, (c) => c.st <= -1, 20);
-      expect(s.car.st).toBe(-1);
-      for (const st of drive(p, s, idle, () => false, 2).st) expect(st).toBe(-1);
+      let s = rolling(p, kmh);
+      for (let k = 0; k < 20 * HZ && s.car.st < 1; k++) {
+        const before = s.car, want = Math.min(1, before.st + 1 / HZ / steerLockTime(p.car, before.v));
+        s = step(s, right, p, carStep);
+        expect(s.car.st, `${kmh} km/h tick ${k}`).toBe(want);
+      }
+      expect(s.car.st).toBe(1);
+      // Held at full lock: the key keeps it there however hard the tyres pull back.
+      for (const st of drive(p, s, right, () => false, 2).st) expect(st).toBe(1);
     }
   });
 
-  it('the racing line keeps the same steering after release (the line now assumes what really happens)', () => {
+  it.each(cars)('%s: both keys together hold the steering, at speed too', (_n, car) => {
+    for (const kmh of [40, 120]) {
+      const p = open(car());
+      const { s } = drive(p, rolling(p, kmh), right, (c) => c.st >= 0.4, 5);
+      for (const st of drive(p, s, { ...idle, left: 1, right: 1 }, () => false, 1).st) expect(st).toBe(s.car.st);
+    }
+  });
+
+  it.each(cars)('%s: parked, a released wheel stays where it was put', (_n, car) => {
+    const p = open(car());
+    const { s } = drive(p, rolling(p, 0), left, (c) => c.st <= -1, 5);
+    expect(s.car.st).toBe(-1);
+    for (const st of drive(p, s, idle, () => false, 2).st) expect(st).toBe(-1);
+  });
+
+  it.each(cars)('%s: released at speed, the wheel only ever moves towards centre', (_n, car) => {
+    for (const kmh of [60, 200]) {
+      const p = open(car());
+      const { s } = drive(p, rolling(p, kmh), left, (c) => c.st <= -0.25, 20);
+      let prev = s.car.st;
+      for (const st of drive(p, s, idle, () => false, 3).st) {
+        expect(st).toBeGreaterThanOrEqual(prev);
+        expect(st).toBeLessThanOrEqual(0);
+        prev = st;
+      }
+      expect(prev, `${kmh} km/h: it did return`).toBeGreaterThan(s.car.st);
+    }
+  });
+
+  it('the racing line assumes the current steering is held, so it follows the wheel as it returns', () => {
     const p = open(s15());
     const { s } = drive(p, rolling(p, 40), right, (c) => c.st >= 0.3, 5);
-    const after = step(s, idle, p, carStep);
-    expect(after.car.st).toBe(s.car.st);
-    // Same steering and speed in, same bend out: the line drawn before release still holds after it.
     const bend = (c: CarState): number => {
       const pts = predict(c, p).pts, [x0, y0] = pts[0]!, [x1, y1] = pts[1]!, [x2, y2] = pts[2]!;
       return Math.atan2(y2 - y1, x2 - x1) - Math.atan2(y1 - y0, x1 - x0);
     };
-    expect(bend(after.car)).toBeCloseTo(bend({ ...after.car, st: s.car.st }), 12);
+    let after = s;
+    for (let i = 0; i < HZ; i++) after = step(after, idle, p, carStep);
+    expect(after.car.st).toBeLessThan(s.car.st);
     expect(bend(after.car)).toBeGreaterThan(0);
+    expect(bend(after.car)).toBeLessThan(bend({ ...after.car, st: s.car.st }));
   });
 });
 
@@ -73,19 +100,5 @@ describe('the opposite key brings the steering back and across (S004-AC-02)', ()
       expect(st.some((x) => Math.abs(x) < 0.2), 'passes through centre').toBe(true);
       for (let i = 1; i < st.length; i++) expect(st[i]!).toBeGreaterThan(st[i - 1]!); // steady travel, no pause
     }
-  });
-
-  it.each(cars)('%s: no self-centring at any speed (a quarter lock held 2 s without keys)', (_n, car) => {
-    for (const kmh of [10, 60, 200]) {
-      const p = open(car());
-      const { s } = drive(p, rolling(p, kmh), left, (c) => c.st <= -0.25, 20);
-      for (const st of drive(p, s, idle, () => false, 2).st) expect(st).toBe(s.car.st);
-    }
-  });
-
-  it('both keys together hold the steering', () => {
-    const p = open(s15());
-    const { s } = drive(p, rolling(p, 40), right, (c) => c.st >= 0.4, 5);
-    for (const st of drive(p, s, { ...idle, left: 1, right: 1 }, () => false, 1).st) expect(st).toBe(s.car.st);
   });
 });
