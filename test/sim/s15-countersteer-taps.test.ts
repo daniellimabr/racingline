@@ -3,7 +3,8 @@
 // pressed late; throttle held (W) or lifted. Before T14 the slide return snapped every released countersteer back to
 // centre within about 0.05 s, so taps never added up and spun catches that holding saved (M1); A pressed on the same
 // tick as D was let go moved the wheel from full right at only the key rate, slower than letting go (M2); and the catch
-// hold pinned the wheels straight whatever the keys did, so three ways into a transition ended identical (m8).
+// hold pinned the wheels straight whatever the keys did, so three ways into a transition ended identical (m8, accepted
+// by Main Dev as is: every way still reaches a slide the other way, test/sim/s15-catch.test.ts).
 import { describe, expect, it } from 'vitest';
 import { createState, step } from '../../src/core/sim.ts';
 import { carStep, createCar, loadCarParams, type CarParams, type SimParams } from '../../src/sim/index.ts';
@@ -31,8 +32,8 @@ function at(car: CarParams, kmh: number): { s: S; p: SimParams } {
 type Keys = 'hold' | [on: number, off: number];
 interface Run { peak: number; spun: boolean }
 
-/** W + D until `rel` deg of slip, D let go; A held or tapped (on/off s) from `delay` s; throttle held or lifted; `secs` s. */
-function release(kmh: number, rel: number, w: boolean, keys: Keys, delay = 0, secs = 4): Run {
+/** W + D until `rel` deg of slip, D let go; A held or tapped (on/off s) from `delay` s; throttle held or lifted; 4 s. */
+function release(kmh: number, rel: number, w: boolean, keys: Keys, delay = 0): Run {
   let { s, p } = at(s15(), kmh);
   for (let n = 0; Math.abs(s.car.beta) < rel / DEG; n++) {
     if (n >= 900) throw new Error(`${kmh} km/h: W + D never reached ${rel} deg`);
@@ -40,7 +41,7 @@ function release(kmh: number, rel: number, w: boolean, keys: Keys, delay = 0, se
   }
   let peak = 0, spun = false;
   const d0 = Math.round(delay * HZ);
-  for (let i = 0; i < secs * HZ; i++) {
+  for (let i = 0; i < 4 * HZ; i++) {
     const j = i - d0;
     let a = 0;
     if (j >= 0 && keys === 'hold') a = 1;
@@ -59,15 +60,13 @@ const TAPS: [number, number][] = [[0.033, 0.1], [0.05, 0.1], [0.1, 0.15], [0.1, 
 
 describe('S005-T14 M1: tapping the countersteer catches as well as holding it', () => {
   // Measured before T14: hold 57-60 deg, every tap pattern spun at 64-78 km/h (30 deg, throttle lifted); with W held
-  // taps spun from 10 deg where holding caught at about 30 deg. Judged over 3 s: taps kept on with full throttle for more
-  // than 3 s re-open the lock after the slide closes (steerCatchRepress) and can turn the car round the other way, as a
-  // held key does once the car settles (64 km/h, 20 deg: 0.15/0.15 and 0.2/0.2 s taps spin at 3.8 s).
+  // taps spun from 10 deg where holding caught at about 30 deg. Judged over the tester's 4 s of keys.
   it.each([
     [64, 30, false], [74, 30, false], [78, 30, false], [64, 20, false], [64, 20, true], [78, 20, true], [64, 10, true], [90, 10, true],
   ] as const)('%i km/h, released at %i deg, throttle held %s: no tap pattern spins where holding does not, peak within 5 deg', (kmh, rel, w) => {
-    const hold = release(kmh, rel, w, 'hold', 0, 3);
+    const hold = release(kmh, rel, w, 'hold');
     for (const t of TAPS) {
-      const r = release(kmh, rel, w, t, 0, 3);
+      const r = release(kmh, rel, w, t);
       if (!hold.spun) expect(r.spun, `taps ${t.join('/')} s`).toBe(false);
       expect(r.peak, `taps ${t.join('/')} s, peak deg (hold ${hold.peak.toFixed(1)})`).toBeLessThan(hold.peak + 5);
     }
@@ -104,48 +103,16 @@ describe('S005-T14 M2: pressing the countersteer on the tick D is let go is neve
   });
 });
 
-describe('S005-T14 m8: keys pressed during a transition make a difference', () => {
-  /** Right slide (W + D to 20 deg) caught with A and W held; when the slip comes back through -10 deg, one of the ways. */
-  function trans(way: 'hold' | 'repress' | 'feint', kmh: number): { wheel: number; spun: boolean } {
-    let { s, p } = at(s15(), kmh);
-    while (s.car.beta > -20 / DEG) s = tick(s, p, { right: 1, throttle: 1 });
-    for (let n = 0, low = 0; ; n++) {
-      if (n >= 600) throw new Error('the slide never came back');
-      s = tick(s, p, { left: 1, throttle: 1 });
-      low = Math.min(low, s.car.beta);
-      if (low < -10.5 / DEG && s.car.beta > -10 / DEG) break;
-    }
-    let wheel = 0, spun = false;
-    for (let i = 0; i < 3 * HZ; i++) {
-      const k: Partial<InputFrame> =
-        way === 'hold' ? { left: 1 } : way === 'repress' ? (i < 6 ? {} : { left: 1 }) : i < 9 ? { right: 1 } : { left: 1 };
-      s = tick(s, p, { ...k, throttle: 1 });
-      if (i < 30) wheel += (s.car.delta * DEG) / 30;
-      spun ||= Math.abs(s.car.beta) > SPIN;
-    }
-    return { wheel, spun };
-  }
-
-  // Before T14 all three gave the same mean wheel angle to 0.01 deg (the hold kept the wheels straight with A held).
-  it.each([70, 80, 90])('%i km/h: holding through steers measurably differently from a release and re-press or a feint', (kmh) => {
-    const hold = trans('hold', kmh), repress = trans('repress', kmh), feint = trans('feint', kmh);
-    expect(Math.abs(repress.wheel - hold.wheel), 're-press against hold, mean wheel deg over 0.5 s').toBeGreaterThan(1);
-    expect(Math.abs(feint.wheel - hold.wheel), 'feint against hold, mean wheel deg over 0.5 s').toBeGreaterThan(1);
-  });
-});
-
-describe('S005-T14: the catch follow rate and the re-press switch are validated car data', () => {
+describe('S005-T14: the catch follow rate is validated car data', () => {
   it('rejects negative, too large or missing values', () => {
-    for (const bad of [{ steerCatchFollow: -1 }, { steerCatchFollow: 5 }, { steerCatchRepress: 2 }, { steerCatchRepress: 'yes' }])
+    for (const bad of [{ steerCatchFollow: -1 }, { steerCatchFollow: 5 }, { steerCatchFollow: 'fast' }])
       expect(() => loadCarParams({ ...s15Json, ...bad }, 'test.json'), JSON.stringify(bad)).toThrow(DataError);
     const { steerCatchFollow: _f, ...noFollow } = s15Json;
     expect(() => loadCarParams(noFollow, 'test.json')).toThrow(/steerCatchFollow/);
-    const { steerCatchRepress: _r, ...noRepress } = s15Json;
-    expect(() => loadCarParams(noRepress, 'test.json')).toThrow(/steerCatchRepress/);
   });
 
-  it('with both off, a released countersteer under the hold returns at the normal rate and taps still add up', () => {
-    const car = { ...s15(), steerCatchFollow: 0, steerCatchRepress: 0 };
+  it('with the follow off, a released countersteer under the hold returns at the normal rate and taps still add up', () => {
+    const car = { ...s15(), steerCatchFollow: 0 };
     let { s, p } = at(car, 64);
     while (Math.abs(s.car.beta) < 30 / DEG) s = tick(s, p, { right: 1, throttle: 1 });
     for (let i = 0; i < 20; i++) s = tick(s, p, { left: 1 });

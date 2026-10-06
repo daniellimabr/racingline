@@ -47,17 +47,13 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   // opens (holdOpen 0 -> 1) at the key rate while a key on that side is held, so a held key steers again like any held
   // key; it ends when fully open or when the wheel is back at centre. A slide reopening on that side makes it catch again
   // (the cap closes at the key rate). Absent when not holding, so runs without a catch hash as before.
-  // S005-T14 (m8): once the catch key is let go (or the other key pressed) it is catching after a release (+-3, with
-  // steerCatchRepress); pressing it again after the slide has closed (body slip back through zero) then opens the cap
-  // at once, so a release and re-press or a feint steers into a transition, while a key held through keeps the hold.
   let hk = Math.sign(s.hold ?? 0), phase = Math.abs(s.hold ?? 0), open = s.holdOpen ?? 0;
   if (sd && sd !== hk && Math.sign(s.ar) === sd && Math.sign(s.beta) === sd && Math.abs(s.beta) > c.counterBetaOnset) {
     hk = sd; phase = 1; open = 0;
   }
   if (hk) {
     const slideOpen = hk * s.beta > c.counterBetaOnset;
-    if (phase === 1 && sd !== hk && c.steerCatchRepress > 0) phase = 3;
-    if (phase !== 2 && !slideOpen && (hk * s.r <= c.steerCatchSettleYaw || (phase === 3 && sd === hk && hk * s.beta <= 0))) phase = 2;
+    if (phase === 1 && !slideOpen && hk * s.r <= c.steerCatchSettleYaw) phase = 2;
     else if (phase === 2 && slideOpen) phase = 1;
     if (phase === 2 && sd === hk) open = Math.min(1, open + kr);
     else open = Math.max(0, open - kr); // catching, or that key let go: the cap closes again at the key rate
@@ -129,7 +125,7 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
 /** S005-T14: the side (+-1) of a catch hold still catching an open slide on that side, else 0. */
 function catchOpen(s: CarState, c: SimParams['car']): number {
   const hk = Math.sign(s.hold ?? 0);
-  return hk && Math.abs(s.hold!) !== 2 && hk * s.beta > c.counterBetaOnset ? hk : 0;
+  return hk && Math.abs(s.hold!) === 1 && hk * s.beta > c.counterBetaOnset ? hk : 0;
 }
 
 /**
@@ -138,7 +134,7 @@ function catchOpen(s: CarState, c: SimParams['car']): number {
  */
 function slideReturn(s: CarState, c: SimParams['car']): boolean {
   const slide = s.v > DRIFT_MIN_SPEED && Math.abs(s.ar) > Math.min(c.steerSlideBeta, c.tirePeakSlip);
-  const held = s.hold !== undefined && Math.abs(s.hold) !== 2 && s.st !== 0 && Math.sign(s.st) === Math.sign(s.hold);
+  const held = Math.abs(s.hold ?? 0) === 1 && s.st !== 0 && Math.sign(s.st) === Math.sign(s.hold!);
   return slide && c.steerSlideShare > 0 && !held;
 }
 
