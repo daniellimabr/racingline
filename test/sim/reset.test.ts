@@ -12,7 +12,7 @@ import { INPUT_LOG_VERSION, parseInputLog, validateInputLog, type InputLog } fro
 import { centerlineAt, nearestOnCenterline } from '../../src/data/track.ts';
 import { combine, KeyboardDevice, type KeyTarget } from '../../src/input/index.ts';
 import { replayRun, startRun, type Run } from '../../src/run.ts';
-import { carStep, createCar, loadCarParams, type CarState } from '../../src/sim/index.ts';
+import { carStep, createCar, loadCarParams, REJOIN_SECONDS, type CarState } from '../../src/sim/index.ts';
 import { TRACKS } from '../../src/tracks/index.ts';
 import s15 from '../../src/cars/s15-drift.json';
 import { autopilot } from './autopilot.ts';
@@ -131,10 +131,11 @@ describe('R reset after a cross-country shortcut (S005-AC-09)', () => {
       drive(toward(state.car, a.x, a.y));
     }
     expect(state.car.off).toBe(false);
-    // Head straight for the later section's centreline across the grass; remember the last on-road tick before leaving.
+    // Head for the later section's centreline across the grass until a wheel is back on its road; remember
+    // the last on-road tick before leaving.
     const goal = centerlineAt(track, LATER);
     let lastOn: CarState | null = state.car, wentOff = false;
-    for (let i = 0; i < 1200 && Math.hypot(goal.x - state.car.x, goal.y - state.car.y) > 3; i++) {
+    for (let i = 0; i < 1200 && !(wentOff && !state.car.off); i++) {
       drive(toward(state.car, goal.x, goal.y, 10));
       if (state.car.off) wentOff = true;
       else if (!wentOff) lastOn = state.car;
@@ -176,6 +177,54 @@ describe('R reset after a cross-country shortcut (S005-AC-09)', () => {
     for (let i = 0; i < 600 && !state.car.off; i++) state = step(state, toward(state.car, far.x, far.y, 10), run.params, carStep);
     expect(state.car.off).toBe(true);
     expectBackAtLeave(step(state, R, run.params, carStep).car, leave);
+  });
+
+  /** Follows the road for `ticks` ticks. */
+  function onRoad(run: Run, state: SimState<CarState>, ticks: number): SimState<CarState> {
+    for (let i = 0; i < ticks; i++) {
+      const a = centerlineAt(track, nearestOnCenterline(track, state.car.x, state.car.y).s + 12);
+      state = step(state, toward(state.car, a.x, a.y), run.params, carStep);
+      expect(state.car.off, 'the car stays on the road').toBe(false);
+    }
+    return state;
+  }
+
+  it(`after ${REJOIN_SECONDS} s back on the road, the leave point catches up: a later departure is where R goes`, () => {
+    const { run, start, frames } = shortcut();
+    let state = onRoad(run, replay(frames, start, run.params, carStep).state, 300); // 5 s on the later section
+    expect('rejoin' in state.car, 'no catch-up still waiting').toBe(false);
+    let lastOn = state.car;
+    for (let i = 0; i < 600 && !state.car.off; i++) {
+      state = step(state, { ...IDLE, throttle: 1, right: 1 }, run.params, carStep);
+      if (!state.car.off) lastOn = state.car;
+    }
+    expect(state.car.off, 'the car left the road again').toBe(true);
+    const leave = nearestOnCenterline(track, lastOn.x, lastOn.y).s;
+    expect(leave).toBeGreaterThan(LATER);
+    const after = step(state, R, run.params, carStep).car;
+    const at = centerlineAt(track, leave);
+    expect([after.x, after.y, after.h]).toEqual([at.x, at.y, Math.atan2(at.dy, at.dx)]);
+    expectAtRest(after);
+  });
+
+  it(`before ${REJOIN_SECONDS} s back on the road, R still goes where it first left; the press clears the wait`, () => {
+    const { run, start, frames, leave } = shortcut();
+    const state = onRoad(run, replay(frames, start, run.params, carStep).state, 120); // 2 s on the later section
+    expect(state.car.rejoin, 'the catch-up is waiting').toBeGreaterThan(0);
+    expect(state.car.rejoin!).toBeLessThan(REJOIN_SECONDS);
+    const after = step(state, R, run.params, carStep).car;
+    expectBackAtLeave(after, leave);
+    expect('rejoin' in after, 'R clears the wait').toBe(false);
+  });
+
+  it('a state saved while the catch-up waits continues bit-identically', () => {
+    const { run, start, frames } = shortcut();
+    const mid = onRoad(run, replay(frames, start, run.params, carStep).state, 60);
+    expect(mid.car.rejoin).toBeGreaterThan(0);
+    const back = deserialize<CarState>(serialize(mid));
+    const a = onRoad(run, mid, 240), b = onRoad(run, back, 240);
+    expect(hashState(b)).toBe(hashState(a));
+    expect('rejoin' in a.car).toBe(false);
   });
 
   it('the shortcut and the press replay identically every time, also from a saved state', () => {

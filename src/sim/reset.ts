@@ -4,7 +4,8 @@
 // The leave point is the centreline distance nearest the car's centre, updated on every tick the car is
 // on the track, so a press while on the track uses the nearest centreline point to where the car is.
 // S005-T4: it only follows the car along the lap. When the car comes back onto the road far from the leave
-// point (a shortcut across the grass to another part of the track), the leave point stays where it left.
+// point (a shortcut across the grass to another part of the track), the leave point stays where it left
+// until the car has stayed on the road for REJOIN_SECONDS; then it catches up with the car.
 import { centerlineAt, nearestOnCenterline, type Track } from '../data/track.ts';
 import type { SimParams } from './params.ts';
 import { createCar, type CarState } from './state.ts';
@@ -17,16 +18,26 @@ export function spawnLeave(track: Pick<Track, 'points' | 'spawn'>): number {
 /** Furthest the leave point may move along the lap in one tick, m: well above one tick of driving, well below any shortcut. */
 export const LEAVE_STEP = 30;
 
+/** Seconds the car must stay on the road, far from the leave point, before the leave point moves to it, s. */
+export const REJOIN_SECONDS = 3;
+
 /**
- * The leave point after a tick: the car's nearest centreline distance while on the track and within
- * LEAVE_STEP of the previous one along the lap (either way, across the start line too), else the previous one.
+ * The leave point after a tick, written into `next` (the car after the tick; `prev` is the car before it).
+ * On the track and within LEAVE_STEP of the previous leave point along the lap (either way, across the
+ * start line too), it follows the car. On the track but further away (after a shortcut), it stays put
+ * while `rejoin` counts the seconds the car has stayed on the road; after REJOIN_SECONDS it moves to the
+ * car. Leaving the road, or following the car again, drops the count (absent unless counting).
  */
-export function nextLeave(track: Pick<Track, 'points' | 'spawn' | 'length'>, prev: number | undefined, car: Pick<CarState, 'x' | 'y' | 'off'>): number {
-  const was = prev ?? spawnLeave(track);
-  if (car.off) return was;
-  const s = nearestOnCenterline(track, car.x, car.y).s, L = track.length;
+export function trackLeave(track: Pick<Track, 'points' | 'spawn' | 'length'>, prev: Pick<CarState, 'leave' | 'rejoin'>, next: CarState, dt: number): void {
+  const was = prev.leave ?? spawnLeave(track);
+  delete next.rejoin;
+  next.leave = was;
+  if (next.off) return;
+  const s = nearestOnCenterline(track, next.x, next.y).s, L = track.length;
   const d = ((((s - was) % L) + L * 1.5) % L) - L / 2; // signed distance along the lap, in [-L/2, L/2)
-  return Math.abs(d) <= LEAVE_STEP ? s : was;
+  const t = (prev.rejoin ?? 0) + dt;
+  if (Math.abs(d) <= LEAVE_STEP || t >= REJOIN_SECONDS - dt / 2) next.leave = s;
+  else next.rejoin = t;
 }
 
 /**
