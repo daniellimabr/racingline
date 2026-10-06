@@ -8,7 +8,7 @@ import { trackDrift, DRIFT_BETA } from './drift.ts';
 import { engine, manualShift } from './engine.ts';
 import { allWheelsOff, createLapState, lapStep } from './laps.ts';
 import { centreRate, phys, steerLockTime } from './physics.ts';
-import { nextLeave, resetCar } from './reset.ts';
+import { resetCar, trackLeave } from './reset.ts';
 import type { SimParams } from './params.ts';
 import type { CarState } from './state.ts';
 import { lotSurface, trackSurface, type AxleSurface } from './surface.ts';
@@ -95,7 +95,7 @@ export const carStep: CarStep<CarState, SimParams> = (car, input, p, ctx) => {
   trackDrift(s, dt);
   if (p.track) {
     s.lap = lapStep(car.lap ?? createLapState(p.track), car, s, p.track, c);
-    s.leave = nextLeave(p.track, car.leave, s);
+    trackLeave(p.track, car, s, dt);
   }
   return s;
 };

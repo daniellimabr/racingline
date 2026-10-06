@@ -12,7 +12,7 @@ import { INPUT_LOG_VERSION, parseInputLog, validateInputLog, type InputLog } fro
 import { centerlineAt, nearestOnCenterline } from '../../src/data/track.ts';
 import { combine, KeyboardDevice, type KeyTarget } from '../../src/input/index.ts';
 import { replayRun, startRun, type Run } from '../../src/run.ts';
-import { carStep, createCar, loadCarParams, type CarState } from '../../src/sim/index.ts';
+import { carStep, createCar, loadCarParams, REJOIN_SECONDS, type CarState } from '../../src/sim/index.ts';
 import { TRACKS } from '../../src/tracks/index.ts';
 import s15 from '../../src/cars/s15-drift.json';
 import { autopilot } from './autopilot.ts';
@@ -98,6 +98,148 @@ describe('R reset on a track (S004-AC-08)', () => {
   it('a new run on a track starts with the leave point at the spawn', () => {
     const r = ring();
     expect(r.state.car.leave).toBe(nearestOnCenterline(track, track.spawn.x, track.spawn.y).s);
+  });
+});
+
+// S005-AC-09: on Interlagos the centreline at about 2770 m runs 39 m from the one at about 3765 m (26 m
+// wide each), so a car can leave the road at the first and cut across the grass to the second.
+describe('R reset after a cross-country shortcut (S005-AC-09)', () => {
+  const FROM = 2650, LATER = 3765;
+
+  /** Steers toward (x, y) at about `speed` m/s, the same keys the autopilot uses. */
+  function toward(c: CarState, x: number, y: number, speed = 14): InputFrame {
+    let e = Math.atan2(y - c.y, x - c.x) - c.h;
+    e = Math.atan2(Math.sin(e), Math.cos(e));
+    const want = Math.max(-1, Math.min(1, e * 2.5));
+    return { ...IDLE, throttle: c.v < speed - 0.5 ? 1 : 0, brake: c.v > speed + 1.5 ? 1 : 0, right: c.st < want ? 1 : 0, left: c.st > want ? 1 : 0 };
+  }
+
+  /** Drives on the road from FROM to past 2770 m, then across the grass until a wheel is on the section near LATER m. */
+  function shortcut() {
+    const run = ring();
+    // An R press with the leave point moved to FROM puts the car there at rest, a quick way to reach the far side of the lap.
+    const start = step({ ...run.state, car: { ...run.state.car, leave: FROM } }, R, run.params, carStep);
+    const frames: InputFrame[] = [];
+    let state = start;
+    const drive = (f: InputFrame) => {
+      frames.push(f);
+      state = step(state, f, run.params, carStep);
+    };
+    // Follow the road to 2770 m.
+    for (let i = 0; i < 2000 && nearestOnCenterline(track, state.car.x, state.car.y).s < 2770; i++) {
+      const a = centerlineAt(track, nearestOnCenterline(track, state.car.x, state.car.y).s + 12);
+      drive(toward(state.car, a.x, a.y));
+    }
+    expect(state.car.off).toBe(false);
+    // Head for the later section's centreline across the grass until a wheel is back on its road; remember
+    // the last on-road tick before leaving.
+    const goal = centerlineAt(track, LATER);
+    let lastOn: CarState | null = state.car, wentOff = false;
+    for (let i = 0; i < 1200 && !(wentOff && !state.car.off); i++) {
+      drive(toward(state.car, goal.x, goal.y, 10));
+      if (state.car.off) wentOff = true;
+      else if (!wentOff) lastOn = state.car;
+    }
+    expect(wentOff, 'the car never left the road').toBe(true);
+    expect(state.car.off, 'the car is back on the road at the later section').toBe(false);
+    expect(nearestOnCenterline(track, state.car.x, state.car.y).s).toBeGreaterThan(LATER - 30);
+    return { run, start, frames, state, leave: nearestOnCenterline(track, lastOn!.x, lastOn!.y).s };
+  }
+
+  function expectBackAtLeave(after: CarState, leave: number) {
+    const at = centerlineAt(track, leave);
+    expect(leave).toBeLessThan(2900); // where it left, not the later section
+    expect([after.x, after.y, after.h]).toEqual([at.x, at.y, Math.atan2(at.dy, at.dx)]);
+    expect(after.leave).toBe(leave);
+    expectAtRest(after);
+  }
+
+  it('pressed on the later section it rejoined, R puts the car back where it left the road', () => {
+    const { run, state, leave } = shortcut();
+    expectBackAtLeave(step(state, R, run.params, carStep).car, leave);
+  });
+
+  it('pressed after driving on along the later section, R still goes back where it left the road', () => {
+    const { run, start, frames, leave } = shortcut();
+    let state = replay(frames, start, run.params, carStep).state;
+    for (let i = 0; i < 90; i++) {
+      const a = centerlineAt(track, nearestOnCenterline(track, state.car.x, state.car.y).s + 12);
+      state = step(state, toward(state.car, a.x, a.y), run.params, carStep);
+    }
+    expect(state.car.off).toBe(false);
+    expectBackAtLeave(step(state, R, run.params, carStep).car, leave);
+  });
+
+  it('pressed out on the grass beyond the later section, R goes back where it left the road', () => {
+    const { run, start, frames, leave } = shortcut();
+    let state = onRoad(run, replay(frames, start, run.params, carStep).state, 60); // 1 s on the later section
+    expect(state.car.rejoin, 'the catch-up is waiting').toBeGreaterThan(0);
+    // The car is then put out on the grass 20 m past the later section's far edge (set in the state, so the
+    // path there does not depend on how the steering feels) and rolls on for half a second.
+    const at = centerlineAt(track, nearestOnCenterline(track, state.car.x, state.car.y).s);
+    const here = centerlineAt(track, 2770), ox = at.x - here.x, oy = at.y - here.y, o = Math.hypot(ox, oy); // away from the first section
+    const out = at.width / 2 + 20;
+    state = { ...state, car: { ...state.car, x: at.x + (ox / o) * out, y: at.y + (oy / o) * out } };
+    state = replay(Array(30).fill(IDLE), state, run.params, carStep).state;
+    expect(state.car.off, 'out on the grass beyond the later section').toBe(true);
+    expect('rejoin' in state.car, 'leaving the road drops the catch-up').toBe(false);
+    expectBackAtLeave(step(state, R, run.params, carStep).car, leave);
+  });
+
+  /** Follows the road for `ticks` ticks. */
+  function onRoad(run: Run, state: SimState<CarState>, ticks: number): SimState<CarState> {
+    for (let i = 0; i < ticks; i++) {
+      const a = centerlineAt(track, nearestOnCenterline(track, state.car.x, state.car.y).s + 12);
+      state = step(state, toward(state.car, a.x, a.y), run.params, carStep);
+      expect(state.car.off, 'the car stays on the road').toBe(false);
+    }
+    return state;
+  }
+
+  it(`after ${REJOIN_SECONDS} s back on the road, the leave point catches up: a later departure is where R goes`, () => {
+    const { run, start, frames } = shortcut();
+    let state = onRoad(run, replay(frames, start, run.params, carStep).state, 300); // 5 s on the later section
+    expect('rejoin' in state.car, 'no catch-up still waiting').toBe(false);
+    let lastOn = state.car;
+    for (let i = 0; i < 600 && !state.car.off; i++) {
+      state = step(state, { ...IDLE, throttle: 1, right: 1 }, run.params, carStep);
+      if (!state.car.off) lastOn = state.car;
+    }
+    expect(state.car.off, 'the car left the road again').toBe(true);
+    const leave = nearestOnCenterline(track, lastOn.x, lastOn.y).s;
+    expect(leave).toBeGreaterThan(LATER);
+    const after = step(state, R, run.params, carStep).car;
+    const at = centerlineAt(track, leave);
+    expect([after.x, after.y, after.h]).toEqual([at.x, at.y, Math.atan2(at.dy, at.dx)]);
+    expectAtRest(after);
+  });
+
+  it(`before ${REJOIN_SECONDS} s back on the road, R still goes where it first left; the press clears the wait`, () => {
+    const { run, start, frames, leave } = shortcut();
+    const state = onRoad(run, replay(frames, start, run.params, carStep).state, 120); // 2 s on the later section
+    expect(state.car.rejoin, 'the catch-up is waiting').toBeGreaterThan(0);
+    expect(state.car.rejoin!).toBeLessThan(REJOIN_SECONDS);
+    const after = step(state, R, run.params, carStep).car;
+    expectBackAtLeave(after, leave);
+    expect('rejoin' in after, 'R clears the wait').toBe(false);
+  });
+
+  it('a state saved while the catch-up waits continues bit-identically', () => {
+    const { run, start, frames } = shortcut();
+    const mid = onRoad(run, replay(frames, start, run.params, carStep).state, 60);
+    expect(mid.car.rejoin).toBeGreaterThan(0);
+    const back = deserialize<CarState>(serialize(mid));
+    const a = onRoad(run, mid, 240), b = onRoad(run, back, 240);
+    expect(hashState(b)).toBe(hashState(a));
+    expect('rejoin' in a.car).toBe(false);
+  });
+
+  it('the shortcut and the press replay identically every time, also from a saved state', () => {
+    const { run, start, frames, leave } = shortcut();
+    const a = replay([...frames, R], start, run.params, carStep).state;
+    const b = replay(JSON.parse(JSON.stringify([...frames, R])) as InputFrame[], deserialize<CarState>(serialize(start)), run.params, carStep).state;
+    expect(hashState(b)).toBe(hashState(a));
+    expectBackAtLeave(a.car, leave);
   });
 });
 
