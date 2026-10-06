@@ -23,6 +23,7 @@ export function combine(devices: readonly InputDevice[]): InputFrame {
     const s = d.sample();
     for (const k of ANALOG) out[k] = Math.max(out[k], unit(s[k]));
     for (const k of PRESSES) out[k] ||= s[k] === true;
+    if (s.reset === true) out.reset = true; // optional field: absent unless pressed
   }
   return out;
 }

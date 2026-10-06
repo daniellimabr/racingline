@@ -8,6 +8,7 @@ import { trackDrift, DRIFT_BETA } from './drift.ts';
 import { engine, manualShift } from './engine.ts';
 import { allWheelsOff, createLapState, lapStep } from './laps.ts';
 import { phys, steerLockTime } from './physics.ts';
+import { nextLeave, resetCar } from './reset.ts';
 import type { SimParams } from './params.ts';
 import type { CarState } from './state.ts';
 import { lotSurface, trackSurface, type AxleSurface } from './surface.ts';
@@ -64,6 +65,8 @@ function noLookup(tr: Track): never {
 
 /** Pure: works on a copy of the car and returns it; car, input and params are never mutated. */
 export const carStep: CarStep<CarState, SimParams> = (car, input, p, ctx) => {
+  // R press (S004-T5): the tick only puts the car back at rest; nothing else runs on it.
+  if (input.reset) return resetCar(car, p, ctx.dt);
   const s: CarState = { ...car }; // nested drift data is replaced, never edited (drift.ts)
   const c = p.car, dt = ctx.dt;
   // v24 key handlers run before the frame's step(); order up, down, automatic (recording order).
@@ -79,6 +82,9 @@ export const carStep: CarStep<CarState, SimParams> = (car, input, p, ctx) => {
   const L = p.lot, px = s.x * L.scale, py = s.y * L.scale;
   s.off = tr ? allWheelsOff(tr, s, c) : px < L.x0 || px > L.x1 || py < L.y0 || py > L.y1;
   trackDrift(s, dt);
-  if (p.track) s.lap = lapStep(car.lap ?? createLapState(p.track), car, s, p.track, c);
+  if (p.track) {
+    s.lap = lapStep(car.lap ?? createLapState(p.track), car, s, p.track, c);
+    s.leave = nextLeave(p.track, car.leave, s);
+  }
   return s;
 };

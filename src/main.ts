@@ -13,6 +13,7 @@ import { analysisHtml, driftTableHtml } from './ui/drifts.ts';
 import { carHud, rpmLegend } from './ui/hud-car.ts';
 import { buildTrackArt, type TrackArt } from './render/track.ts';
 import { bindTrackChooser } from './ui/track-chooser.ts';
+import { KEY_HINT } from './ui/key-hint.ts';
 import { LOT_TRACK_ID, startRun, TRACK_CHOICES } from './run.ts';
 
 function byId<T extends HTMLElement>(id: string, type: new () => T): T {
@@ -93,7 +94,7 @@ function nextCar(): void {
 const keyboard = new KeyboardDevice(cv, { onPause: togglePause, onCarSwitch: nextCar });
 const HINT_IDLE = 'Clique no jogo ou use Tab para focar';
 cv.addEventListener('blur', () => (msg.textContent = HINT_IDLE));
-cv.addEventListener('focus', () => (msg.textContent = 'W/S pedais · A/D direção · , reduz · . sobe · M auto · C carro · P pausa'));
+cv.addEventListener('focus', () => (msg.textContent = KEY_HINT));
 cv.addEventListener('click', () => cv.focus());
 byId('ps', HTMLButtonElement).addEventListener('click', () => {
   togglePause();

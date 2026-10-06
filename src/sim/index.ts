@@ -7,6 +7,7 @@ export { predict, type Prediction } from './predict.ts';
 export { aero, G, phys, ratio, steerLockTime, type Aero } from './physics.ts';
 export { tractionState, HALO_SPAN, HALO_THRESHOLD, type TractionState } from './traction.ts';
 export { DRIFT_BETA } from './drift.ts';
+export { nextLeave, resetCar, spawnLeave } from './reset.ts';
 export { lotSurface, trackSurface, type AxleSurface, type SurfaceAt } from './surface.ts';
 export {
   allWheelsOff, createLapState, crossing, lapProgress, lapStep, LINE_MARGIN, wheelPositions,
