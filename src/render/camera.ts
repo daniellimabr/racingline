@@ -52,3 +52,8 @@ export function viewRect(cam: Camera, margin: number): Rect {
   const hw = CX / cam.z + margin, hh = CY / cam.z + margin;
   return { x0: cam.cx - hw, y0: cam.cy - hh, x1: cam.cx + hw, y1: cam.cy + hh };
 }
+
+/** A screen px rectangle in world px (the camera never rotates, so it stays a rectangle). */
+export function toWorldRect(cam: Camera, r: Rect): Rect {
+  return { x0: (r.x0 - CX) / cam.z + cam.cx, y0: (r.y0 - CY) / cam.z + cam.cy, x1: (r.x1 - CX) / cam.z + cam.cx, y1: (r.y1 - CY) / cam.z + cam.cy };
+}

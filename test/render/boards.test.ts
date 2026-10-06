@@ -91,18 +91,19 @@ describe('distance boards', () => {
 
   it(`stand only where the road turns less than ${STRAIGHT_MAX_TURN} degrees within ${STRAIGHT_LOOK} m either side`, () => {
     expect([STRAIGHT_LOOK, STRAIGHT_MAX_TURN]).toEqual([25, 10]);
-    // The corner at s = 700 turns 90 degrees: the 200 board (s 690) stands in it and is left out; the rest stand.
+    // The corner at s = 700 turns 90 degrees: the 200 board (s 690) stands in it, so the whole set is left out
+    // (S005-T5: a braking point shows all four boards or none, never a broken set).
     const t = rectangle(false, { brakePoints: [{ s: 890, name: 'A' }] });
-    expect(boardsFor(t).map((b) => b.label)).toEqual(['150', '100', '50']);
+    expect(boardsFor(t)).toEqual([]);
     // 26 m after the corner the road is straight again, so a board there stands.
     expect(boardsFor(rectangle(false, { brakePoints: [{ s: 926, name: 'B' }] })).map((b) => b.s)).toEqual([726, 776, 826, 876]);
-    // A braking point whose boards all stand in a bend gets none (Laranjinha on the real file, below).
+    // A braking point whose boards stand in a bend gets none (Laranjinha, Bico de Pato and Junção on the real file, below).
   });
 
   it('stand off the road on Interlagos for braking points spread round the lap', () => {
     const brakePoints = Array.from({ length: 12 }, (_, i) => ({ s: 150 + i * 340, name: 'C' + i }));
     const boards = boardsFor({ ...interlagos, apexKerbs: [], brakePoints });
-    expect(boards.length).toBeGreaterThan(12);
+    expect(boards.length).toBeGreaterThanOrEqual(8); // only complete sets on straight road stand (S005-T5)
     for (const b of boards) {
       const near = nearestOnCenterline(interlagos, b.x, b.y);
       expect(near.distance, `board ${b.label} at s ${b.s}`).toBeGreaterThan(near.width / 2 + vergeTotal);
@@ -178,14 +179,21 @@ describe('the real Interlagos file', () => {
       ['S do Senna', '200', 4277], ['S do Senna', '150', 27], ['S do Senna', '100', 77], ['S do Senna', '50', 127],
       ['Descida do Lago', '200', 1052], ['Descida do Lago', '150', 1102], ['Descida do Lago', '100', 1152], ['Descida do Lago', '50', 1202],
       ['Ferradura', '200', 1761], ['Ferradura', '150', 1811], ['Ferradura', '100', 1861], ['Ferradura', '50', 1911],
-      // Bico de Pato: 200 (s 2500) and 150 (s 2550) stand in Pinheirinho, 50 (s 2650) where Bico de Pato already bends.
-      ['Bico de Pato', '100', 2600],
-      // Junção: 200 and 150 stand in Mergulho.
-      ['Junção', '100', 3116], ['Junção', '50', 3166],
+      // None at Bico de Pato (200 at s 2500 and 150 at s 2550 stand in Pinheirinho, 50 at s 2650 where Bico de Pato
+      // already bends) and none at Junção (200 and 150 stand in Mergulho): a broken set is left out whole (S005-T5).
     ]);
     expect(kerbsFor(interlagos)).toHaveLength(13);
     const art = buildTrackArt(interlagos, PX);
-    expect([art.boards.length, art.kerbs.length]).toEqual([15, 13]);
+    expect([art.boards.length, art.kerbs.length]).toEqual([12, 13]);
+  });
+
+  it('gives every braking point a complete set of four boards or none (S005-T5)', () => {
+    const boards = boardsFor(interlagos);
+    for (const bp of interlagos.brakePoints) {
+      const set = boards.filter((b) => b.corner === bp.name).map((b) => b.label);
+      expect(set.length === 0 || set.join() === '200,150,100,50', bp.name + ': ' + set.join()).toBe(true);
+    }
+    expect(boards.filter((b) => b.corner === 'Bico de Pato' || b.corner === 'Junção')).toEqual([]);
   });
 
   it('keeps the S do Senna 200 m board at the end of the previous lap, off the road', () => {
