@@ -83,16 +83,17 @@ export function centerlineAt(track: Pick<Track, 'points'>, s: number): Centerlin
   return { x: p[0] + (q[0] - p[0]) * t, y: p[1] + (q[1] - p[1]) * t, dx: (q[0] - p[0]) / seg, dy: (q[1] - p[1]) / seg, width: p[2] + (q[2] - p[2]) * t };
 }
 
-/** Distance from (x, y) to the centerline and the track width at the nearest spot, m. */
-export function nearestOnCenterline(track: Pick<Track, 'points'>, x: number, y: number): { distance: number; width: number } {
+/** Distance from (x, y) to the centerline, the track width at the nearest spot and that spot's distance `s` along the lap, m. */
+export function nearestOnCenterline(track: Pick<Track, 'points'>, x: number, y: number): { distance: number; width: number; s: number } {
   const pts = track.points;
-  let best = { distance: Infinity, width: 0 };
+  let best = { distance: Infinity, width: 0, s: 0 }, at = 0;
   for (let i = 0; i < pts.length; i++) {
     const p = pts[i]!, q = pts[(i + 1) % pts.length]!;
-    const ex = q[0] - p[0], ey = q[1] - p[1];
+    const ex = q[0] - p[0], ey = q[1] - p[1], len = Math.hypot(ex, ey);
     const t = Math.min(1, Math.max(0, ((x - p[0]) * ex + (y - p[1]) * ey) / (ex * ex + ey * ey)));
     const distance = Math.hypot(x - (p[0] + ex * t), y - (p[1] + ey * t));
-    if (distance < best.distance) best = { distance, width: p[2] + (q[2] - p[2]) * t };
+    if (distance < best.distance) best = { distance, width: p[2] + (q[2] - p[2]) * t, s: at + len * t };
+    at += len;
   }
   return best;
 }

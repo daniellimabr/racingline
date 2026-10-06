@@ -40,9 +40,13 @@ const AXES = ['throttle', 'brake', 'left', 'right'] as const;
 const BUTTONS = ['shiftUp', 'shiftDown', 'toggleAuto'] as const;
 const FRAME_KEYS = [...AXES, ...BUTTONS];
 
-function checkFrame(c: Checker, v: unknown, path: string): void {
+/** The R reset press (S004-T5) is optional in version 2 logs, so earlier logs stay valid; v24 logs never have it. */
+const OPTIONAL_BUTTONS = ['reset'] as const;
+
+function checkFrame(c: Checker, v: unknown, path: string, v24: boolean): void {
   if (!c.object(v, path)) return;
-  c.keys(v, path, FRAME_KEYS);
+  c.keys(v, path, FRAME_KEYS, v24 ? [] : OPTIONAL_BUTTONS);
+  if (!v24) for (const k of OPTIONAL_BUTTONS) if (Object.hasOwn(v, k)) c.boolean(v[k], `${path}.${k}`);
   for (const k of AXES) if (Object.hasOwn(v, k)) c.number(v[k], `${path}.${k}`, { min: 0, max: 1 });
   for (const k of BUTTONS) if (Object.hasOwn(v, k)) c.boolean(v[k], `${path}.${k}`);
 }
@@ -75,7 +79,7 @@ export function checkInputLog(c: Checker, v: unknown, path: string, v24 = false)
   if (!has('frames') || !c.array(v['frames'], `${path}.frames`)) return -1;
   const frames = v['frames'];
   // Index loop on purpose: forEach would skip holes in a sparse array.
-  for (let i = 0; i < frames.length; i++) checkFrame(c, frames[i], `${path}.frames[${i}]`);
+  for (let i = 0; i < frames.length; i++) checkFrame(c, frames[i], `${path}.frames[${i}]`, v24);
   return frames.length;
 }
 

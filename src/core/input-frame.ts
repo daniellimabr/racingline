@@ -7,4 +7,6 @@ export interface InputFrame {
   shiftUp: boolean; // one-tick press (v24 Period)
   shiftDown: boolean; // one-tick press (v24 Comma)
   toggleAuto: boolean; // one-tick press (v24 KeyM)
+  /** One-tick press (key R, S004-T5): put the car back at rest. Optional so earlier logs replay unchanged; absent means not pressed. */
+  reset?: boolean;
 }

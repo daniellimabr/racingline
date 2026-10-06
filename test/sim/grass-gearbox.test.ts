@@ -27,7 +27,9 @@ function launch(car: string, surface: string, secs: number) {
     kmh.push(s.car.v / KMH);
     gears.push(s.car.gear);
   }
-  return { kmh, gears, hash: hashState(s) };
+  // The R reset's leave point (S004-T5) is left out, so the hash still covers exactly the state recorded before it.
+  const { leave: _leave, ...car0 } = s.car;
+  return { kmh, gears, hash: hashState({ ...s, car: car0 }) };
 }
 const at = (kmh: number[], secs: number) => kmh[secs * 60 - 1]!;
 
