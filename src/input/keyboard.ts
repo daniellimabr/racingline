@@ -22,14 +22,14 @@ export interface KeyboardOptions {
 }
 
 type Held = 'throttle' | 'brake' | 'left' | 'right';
-type Press = 'shiftUp' | 'shiftDown' | 'toggleAuto';
+type Press = 'shiftUp' | 'shiftDown' | 'toggleAuto' | 'reset';
 
 const HELD: Readonly<Record<string, Held>> = {
   KeyW: 'throttle', ArrowUp: 'throttle', KeyS: 'brake', ArrowDown: 'brake',
   KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
 };
 const PRESS: Readonly<Record<string, Press>> = {
-  Period: 'shiftUp', NumpadDecimal: 'shiftUp', Comma: 'shiftDown', KeyM: 'toggleAuto',
+  Period: 'shiftUp', NumpadDecimal: 'shiftUp', Comma: 'shiftDown', KeyM: 'toggleAuto', KeyR: 'reset',
 };
 
 export class KeyboardDevice implements InputDevice {
