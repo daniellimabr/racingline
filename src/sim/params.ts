@@ -64,6 +64,9 @@ export const CAR_SCHEMA = {
   // most along the direction of travel until the car settles, then a key held on that side brings the lock back at the key rate.
   steerCatchSettleYaw: num(0, 5), // rad/s, the catch hold keeps catching while the car still rotates back towards the caught side faster than this · 0.1 (about 6 deg/s) · tuned (S005-T12)
   steerCatchHold: num(0, 1), // share of the catch hold, 1 = full, 0 = off · 1 (S15 tester catch released 0-0.2 s after the slide closes: 0-4 deg the other way, was a spin) · tuned (S005-T10 option 1B)
+  // S005-T14 (blind test round 4, M1, Main Dev choice A): while the catch is open the countersteer follows the slide like
+  // a free wheel pulled by its caster, held key or not, so taps catch like a held key.
+  steerCatchFollow: num(0, 4), // share of the key rate at which a caught slide's countersteer goes on (held, tapped or let go) while the slide stays open; 0 = only the held key, at the key rate, and a released countersteer returns at the normal rate · 2 (same as steerSlideShare; S15 taps within 0.7 deg of holding, were 10-30 deg worse or a spin) · tuned (S005-T14)
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned
   brakeRise: num(0.01, 100), // 1/s · sim() 1.1 · tuned

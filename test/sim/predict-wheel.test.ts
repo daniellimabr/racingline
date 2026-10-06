@@ -40,7 +40,7 @@ describe('the projected line follows the real road-wheel angle (S005-T13 m3)', (
     let found: CarState | undefined;
     for (let i = 0; i < 6 * 60 && !found; i++) {
       s = tick(s, p, { left: 1, throttle: 1 });
-      if (s.car.hold && s.car.st === -1 && Math.abs(s.car.delta) < 0.2 / DEG) found = s.car;
+      if (s.car.hold && s.car.st === -1 && Math.abs(s.car.delta) < 0.01 / DEG) found = s.car; // S005-T14: 0.2 -> 0.01 deg (0.2 deg bends a 42 m line by 3 deg)
     }
     expect(found, 'a tick with the key at full lock and the wheels straight').toBeDefined();
     expect(Math.abs(turn(found!, p)), 'deg turned along the line').toBeLessThan(0.5);
