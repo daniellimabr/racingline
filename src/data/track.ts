@@ -1,6 +1,7 @@
 // Track files are data (ADR-001, ADR-005): src/tracks/*.json is checked here before the game uses it,
 // the same way car files are checked in car-params.ts. Shape agreed with Back End and Front End in
-// docs/sprints/SPRINT-003/mailbox/database-to-{back-end,front-end}-track-format.md.
+// docs/sprints/SPRINT-003/mailbox/database-to-{back-end,front-end}-track-format.md; apexKerbs and
+// brakePoints (optional, still v 1) in docs/sprints/SPRINT-004/mailbox/database-to-front-end-track-fields.md.
 // Frame: local metres, x east, y south (screen down, same as the sim's world x, y and heading h).
 import { Checker, orThrow, type Result } from './check.ts';
 
@@ -45,6 +46,28 @@ export interface Track {
   readonly outside: string;
   /** Car start position, m, and heading, rad. */
   readonly spawn: { readonly x: number; readonly y: number; readonly h: number };
+  /** Wider kerbs at corner apexes, in driving order; [] when the file has none (optional in the file). */
+  readonly apexKerbs: readonly ApexKerb[];
+  /** Where braking starts before a corner, in driving order; [] when the file has none (optional in the file). */
+  readonly brakePoints: readonly BrakePoint[];
+}
+
+/**
+ * A "kerb" band from the road edge outward on one side, between distances `from` and `to` along the lap.
+ * There it covers 0..width m past the edge in place of the verge bands; beyond it the usual bands apply.
+ */
+export interface ApexKerb {
+  readonly from: number;
+  readonly to: number;
+  /** In the driving direction. */
+  readonly side: 'left' | 'right';
+  readonly width: number;
+}
+
+/** Distance along the lap where braking for the named corner starts, m. */
+export interface BrakePoint {
+  readonly s: number;
+  readonly name: string;
 }
 
 const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -151,12 +174,54 @@ function checkSurfaceName(c: Checker, v: unknown, path: string, known: readonly 
   }
 }
 
+/** Apex kerbs: shape, inside the lap, in driving order, no overlap on one side, and a "kerb" surface to use. */
+function checkApexKerbs(c: Checker, v: unknown, length: number | null, known: readonly string[] | null): void {
+  if (!c.array(v, '$.apexKerbs')) return;
+  const last: Partial<Record<'left' | 'right', { i: number; from: number; to: number }>> = {};
+  let prevFrom: number | null = null;
+  v.forEach((k, i) => {
+    const path = `$.apexKerbs[${i}]`;
+    if (!c.object(k, path) || !c.keys(k, path, ['from', 'to', 'side', 'width'])) return;
+    const fromOk = c.number(k.from, `${path}.from`, { min: 0 }), toOk = c.number(k.to, `${path}.to`);
+    if (k.side !== 'left' && k.side !== 'right') c.fail(`${path}.side`, `expected "left" or "right" (in the driving direction), got ${JSON.stringify(k.side)}`);
+    if (c.number(k.width, `${path}.width`, { min: 0, max: 10 }) && k.width <= 0) c.fail(`${path}.width`, `expected a width above 0 m, got ${k.width}`);
+    if (!fromOk || !toOk) return;
+    const from = k.from as number, to = k.to as number;
+    if (to <= from) return void c.fail(`${path}.to`, `expected a distance above from (${from}), got ${to}`);
+    if (length !== null && to > length) return void c.fail(`${path}.to`, `expected a distance up to the lap length ${length} m, got ${to}`);
+    if (prevFrom !== null && from < prevFrom) return void c.fail(`${path}.from`, `expected kerbs in driving order (from at least ${prevFrom}), got ${from}`);
+    prevFrom = from;
+    if (k.side !== 'left' && k.side !== 'right') return;
+    const before = last[k.side];
+    if (before && from < before.to) return void c.fail(path, `overlaps kerb ${before.i} on the ${k.side} side (${before.from}..${before.to} m)`);
+    last[k.side] = { i, from, to };
+  });
+  if (v.length > 0 && known !== null && !known.includes('kerb')) c.fail('$.apexKerbs', `apex kerbs need a surface named "kerb" (known: ${known.join(', ')})`);
+}
+
+/** Braking points: shape, inside the lap, strictly in driving order. */
+function checkBrakePoints(c: Checker, v: unknown, length: number | null): void {
+  if (!c.array(v, '$.brakePoints')) return;
+  let prev: number | null = null;
+  v.forEach((b, i) => {
+    const path = `$.brakePoints[${i}]`;
+    if (!c.object(b, path) || !c.keys(b, path, ['s', 'name'])) return;
+    c.string(b.name, `${path}.name`);
+    if (!c.number(b.s, `${path}.s`, { min: 0 })) return;
+    if (length !== null && b.s >= length) return void c.fail(`${path}.s`, `expected a distance below the lap length ${length} m, got ${b.s}`);
+    if (prev !== null && b.s <= prev) return void c.fail(`${path}.s`, `expected a distance above ${prev} (braking points in driving order), got ${b.s}`);
+    prev = b.s;
+  });
+}
+
 const FIELDS = ['schema', 'v', 'id', 'name', 'credit', 'source', 'estimates', 'length', 'points', 'startLine', 'sectorLines', 'surfaces', 'road', 'verge', 'outside', 'spawn'];
+/** Added in Sprint 004 without a version change: older files simply have none. */
+const OPTIONAL_FIELDS = ['apexKerbs', 'brakePoints'];
 
 export function validateTrack(v: unknown): Result<Track> {
   const c = new Checker();
   if (!c.object(v, '$')) return c.result(v);
-  c.keys(v, '$', FIELDS);
+  c.keys(v, '$', FIELDS, OPTIONAL_FIELDS);
   const has = (k: string): boolean => Object.hasOwn(v, k);
 
   if (has('schema')) c.equals(v.schema, 'track', '$.schema', 'schema');
@@ -235,7 +300,12 @@ export function validateTrack(v: unknown): Result<Track> {
       if (near.distance > near.width / 2) c.fail('$.spawn', `the start position is ${near.distance.toFixed(1)} m from the centerline, outside the road`);
     }
   }
-  return c.result<Track>(v);
+  const length = track === null ? null : track.length;
+  if (has('apexKerbs')) checkApexKerbs(c, v.apexKerbs, length, known);
+  if (has('brakePoints')) checkBrakePoints(c, v.brakePoints, length);
+  const r = c.result<Track>(v);
+  // A copy with the optional lists filled; the input is never changed.
+  return r.ok ? { ok: true, value: { ...r.value, apexKerbs: r.value.apexKerbs ?? [], brakePoints: r.value.brakePoints ?? [] } } : r;
 }
 
 /** Like validateTrack, but throws a DataError naming the file, each field and the reason. */
