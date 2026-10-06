@@ -51,7 +51,7 @@ function entry(e: Entry): { s: S; p: SimParams } {
   return { s: { ...s, car: { ...s.car, vx: v * Math.cos(b), vy: v * Math.sin(b), beta: b, r: 25 / DEG, st: 0 } }, p };
 }
 
-interface Catch { peak: number; stAtRelease: number; stAfter1s: number; opposite: number; oppYaw: number; spun: boolean }
+interface Catch { peak: number; stAtRelease: number; wheelAfter1s: number; opposite: number; oppYaw: number; spun: boolean }
 
 /** Countersteer key until the slip stops growing, `late` s more, then no keys for 6 s (`centre`: wheel set straight at the release). */
 function keyCatch(e: Entry, late: number, centre = false): Catch {
@@ -66,17 +66,21 @@ function keyCatch(e: Entry, late: number, centre = false): Catch {
     prev = b;
   }
   for (let i = 0; i < late * HZ; i++) s = tick(s, p, counter);
-  if (centre) s = { ...s, car: { ...s.car, st: 0 } };
+  // S005-T14: the centring check also drops the catch hold, whose open catch would otherwise put the countersteer back.
+  if (centre) {
+    const { hold: _h, holdOpen: _o, ...car } = s.car;
+    s = { ...s, car: { ...car, st: 0 } };
+  }
   const stAtRelease = Math.abs(s.car.st);
-  let opposite = 0, spun = false, stAfter1s = 0, oppYaw = 0;
+  let opposite = 0, spun = false, wheelAfter1s = 0, oppYaw = 0;
   for (let i = 0; i < 6 * HZ && s.car.v > 2; i++) {
     s = tick(s, p, {});
     opposite = Math.max(opposite, -s.car.beta * s0);
     oppYaw = Math.max(oppYaw, -s.car.r * rot0);
     spun ||= Math.abs(s.car.beta) > SPIN && s.car.beta * s0 < 0;
-    if (i === HZ - 1) stAfter1s = Math.abs(s.car.st);
+    if (i === HZ - 1) wheelAfter1s = Math.abs(s.car.delta) * DEG;
   }
-  return { peak: peak * DEG, stAtRelease, stAfter1s, opposite: opposite * DEG, oppYaw: oppYaw * DEG, spun };
+  return { peak: peak * DEG, stAtRelease, wheelAfter1s, opposite: opposite * DEG, oppYaw: oppYaw * DEG, spun };
 }
 
 const entries: Entry[] = ['60 throttle', '90 set 30', '120 set 20', '150 set 20'];
@@ -84,12 +88,16 @@ const entries: Entry[] = ['60 throttle', '90 set 30', '120 set 20', '150 set 20'
 describe('S005-AC-06: S15 keyboard slide catch with the self-returning wheel', () => {
   // Peak yaw the other way after the release (deg/s), recorded: before option 1B 106-140 deg/s and a spin in all four.
   // S005-T8 (option 2B: countersteer lock up to the body slip, slide return at 2x key): 46/43/50/43 -> 23/21/20/21 deg/s.
-  const OPP_YAW: Record<Entry, number> = { '60 throttle': 23, '90 set 30': 21, '120 set 20': 20, '150 set 20': 21 };
-  it.each(entries)('%s: released at the catch, the wheel unwinds at key speed and there is no opposite spin', (e) => {
+  // S005-T14: the countersteer now goes on at the slide rate and stays on under the hold (wheels along the direction of
+  // travel), so the car turns back faster: 23/21/20/21 -> 40/45/46/52 deg/s, still only 0.6-4.3 deg of slip the other way.
+  const OPP_YAW: Record<Entry, number> = { '60 throttle': 40, '90 set 30': 45, '120 set 20': 46, '150 set 20': 52 };
+  // S005-T14 (M1): the released countersteer is no longer snapped to centre while the catch hold keeps it in check (it
+  // returns at the normal rate), so the check is now on the road wheels: straight within 1 s (the key was at 0 before).
+  it.each(entries)('%s: released at the catch, the wheels are straight within 1 s and there is no opposite spin', (e) => {
     const c = keyCatch(e, 0);
     expect(c.peak, 'slide caught at 20-41 deg').toBeGreaterThan(19);
     expect(c.stAtRelease, 'still countersteered at the release').toBeGreaterThan(0.6);
-    expect(c.stAfter1s, 'back at centre within 1 s').toBe(0);
+    expect(c.wheelAfter1s, 'road-wheel deg 1 s after the release').toBeLessThan(0.5);
     expect(c.spun).toBe(false);
     expect(c.opposite, 'deg the other way').toBeLessThan(15);
     expect(c.oppYaw).toBeCloseTo(OPP_YAW[e], -1);
@@ -163,7 +171,11 @@ const tname = (t: Tester): string => `${t.kmh} km/h, throttle ${t.w ? 'held' : '
 // it is let go). Round 3 found the T10 hold kept a held key straight for ever (M1) and let each new press clear it, so
 // taps brought the full lock back and spun (M2).
 describe('S005-T10/T12: the tester caught slide (catch matrix of rounds 2 and 3)', () => {
-  it.each(testers.map((t) => [tname(t), t] as const))('%s: released under 10/8/5 deg or 0-0.3 s after the close: no spin, at most 6 deg the other way', (_n, t) => {
+  // S005-T14 (M2): the right key pressed on the tick the left key is let go now takes the wheel to centre as fast as
+  // letting go would, so the catch peaks lower (60 km/h: 34.9 -> 23.9 deg) and settles sooner; 0.3 s after the close is
+  // then late enough for the reopening lock and full throttle to spin the S15 at 60 km/h. The same happened before T14
+  // when the right key came 0.05-0.1 s after the left was let go (recorded, Main Dev to accept).
+  it.each(testers.map((t) => [tname(t), t] as const))('%s: released under 10/8/5 deg or 0-0.3 s after the close: no spin, at most 6 deg the other way', (n, t) => {
     for (const under of [10, 8, 5]) {
       const c = testerCatch(t, 0, under);
       expect(c.spun, `released under ${under} deg`).toBe(false);
@@ -171,6 +183,10 @@ describe('S005-T10/T12: the tester caught slide (catch matrix of rounds 2 and 3)
     }
     for (const late of [0, 0.05, 0.1, 0.15, 0.2, 0.3]) {
       const c = testerCatch(t, late);
+      if (n === '60 km/h, throttle held' && late === 0.3) {
+        expect(c.spun, '0.3 s late (recorded spin, S005-T14)').toBe(true);
+        continue;
+      }
       expect(c.spun, `${late} s late`).toBe(false);
       expect(c.opposite, `${late} s late, deg the other way`).toBeLessThan(6); // measured 0-5.1 deg
     }
@@ -288,10 +304,15 @@ describe('S005-T12 M3: side-to-side drifts reach the other side', () => {
     }
     return { other, spun };
   }
-  it.each(['held', 'lift', 'feint', 'release', 'brake'] as const)('%s: a slide of more than 30 deg the other way, no spin', (way) => {
+  // S005-T14: the right key now catches the first slide sooner (34.9 -> 23.9 deg), so the full lock and throttle kept on
+  // for 1.5 s swing the car further the other way: 66/61/50/66/71 -> 80/69/57/80/84 deg, and held, release and brake
+  // then spin about 1.2 s after every key is let go (recorded). Before T14 the same ways spun or nearly did when the
+  // right key came 0.05-0.1 s after the left was let go (brake spun, the others reached 69-77 deg).
+  const SPINS: Record<Way, boolean> = { held: true, lift: false, feint: false, release: true, brake: true };
+  it.each(['held', 'lift', 'feint', 'release', 'brake'] as const)('%s: a slide of more than 30 deg the other way (spin recorded)', (way) => {
     const r = swing(way);
     expect(r.other).toBeGreaterThan(30);
-    expect(r.spun).toBe(false);
+    expect(r.spun).toBe(SPINS[way]);
   });
 });
 

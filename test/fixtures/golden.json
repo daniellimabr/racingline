@@ -25,7 +25,8 @@
     "S005-T8 drift-countersteer (state, line): the slide return of option 1B now reads the slip at the rear axle and needs drift speed (blind test M5: the geometric body slip of a slow tight turn is no slide), so the recorded run unwinds slightly differently and ends 0.04 m away, stopped after the same spin and grip drift; the other five keep their hashes.",
     "S005-T8 drift-countersteer (state, line): Main Dev options 2B (countersteer lock at most the body slip, slide return at 2x key), 4B/m1A (return limit shrinks near centre, minimum return above 20 km/h) and 5B (slow-branch side force); the recorded open-loop drift no longer swings into a spin, so it ends rolling at 55 km/h after one grip drift instead of stopped after a spin and a drift; GT3 rear grip is in no recording; the other five keep their hashes.",
     "S005-T10 drift-countersteer and steady-corner (state, line): Main Dev options 1B (catch hold: a held countersteer keeps the wheels at most along the direction of travel) and 2A (steering geometry return ramped in from 3 km/h, minimum return ramped in instead of a step at 20 km/h); the drift recording ends rolling at 56 instead of 55 km/h about 8 m away after the same single 24 deg grip drift, and steady-corner is re-recorded from the game (its taps adapt to the quicker return) and still holds a steady 43 km/h corner; the other four keep their hashes.",
-    "S005-T13 m3 steady-corner (line only): the projected racing line now curves by the car's real road-wheel angle instead of the key position, so the line drawn from the final state of the 43 km/h corner differs slightly; every state hash and the other five line hashes are unchanged."
+    "S005-T13 m3 steady-corner (line only): the projected racing line now curves by the car's real road-wheel angle instead of the key position, so the line drawn from the final state of the 43 km/h corner differs slightly; every state hash and the other five line hashes are unchanged.",
+    "S005-T14 drift-countersteer (state, line): the recorded countersteer key now takes the wheel to centre as fast as letting go and, while the catch is open, puts the countersteer on at the slide rate held or tapped (steerCatchFollow 2), so the recorded slide peaks at 16.5 instead of 24 deg and is caught before it counts as a drift; the car ends 10 m away at the same 56 km/h with no spin; the other five keep their hashes."
   ],
   "scenarios": {
     "braking": {
@@ -33,8 +34,8 @@
       "line": "6d5e7bb710958cb5"
     },
     "drift-countersteer": {
-      "state": "11574243cfc52e82",
-      "line": "bca3bffd6e1dd045"
+      "state": "121d377a2a4dd310",
+      "line": "b409cbfc29a1f7b0"
     },
     "manual-shift": {
       "state": "4e550d96a236874f",

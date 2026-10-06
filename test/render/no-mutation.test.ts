@@ -36,9 +36,10 @@ function stubContext(counter: { calls: number }): CanvasRenderingContext2D {
 
 const idle: InputFrame = { throttle: 0, brake: 0, left: 0, right: 0, shiftUp: false, shiftDown: false, toggleAuto: false };
 // Accelerate, flick right, then hold left with throttle: grip, halo, slide and drift paths all show up.
+// S005-T14: the flick is 1 s instead of 0.67 s, because the held left key now catches a 0.67 s flick at 12 deg (no drift).
 const frameAt = (i: number): InputFrame =>
   i < 150 ? { ...idle, throttle: 1 }
-  : i < 190 ? { ...idle, throttle: 1, right: 1 }
+  : i < 210 ? { ...idle, throttle: 1, right: 1 }
   : i < 420 ? { ...idle, throttle: 1, left: 1 }
   : { ...idle, brake: 1 };
 

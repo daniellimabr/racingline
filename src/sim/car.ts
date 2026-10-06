@@ -24,7 +24,17 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   s.b = k.brake > 0 ? Math.min(1, s.b + c.brakeRise * dt) : Math.max(0, s.b - c.brakeFall * dt);
   // S004-T2: the steering stays where it is put (no self-centring); a key moves it at a speed-dependent rate.
   const sd = (k.right > 0 ? 1 : 0) - (k.left > 0 ? 1 : 0);
-  if (sd) s.st = Math.max(-1, Math.min(1, s.st + (sd * dt) / steerLockTime(c, s.v)));
+  const kr = dt / steerLockTime(c, s.v), follow = (c.steerCatchFollow * dt) / steerLockTime(c, s.v);
+  if (sd && sd * s.st < 0 && slideReturn(s, c)) {
+    // S005-T14 (M2): a key against a wheel that the slide return would bring back takes it to centre at least as fast
+    // as letting go would (the slide return), then on past centre at the key rate for the rest of the tick.
+    const fr = kr * Math.max(1, c.steerSlideShare);
+    s.st = Math.abs(s.st) > fr ? s.st + sd * fr : sd * Math.min(1, kr * (1 - Math.abs(s.st) / fr));
+  } else if (sd) {
+    // S005-T14 (M1): while a catch is open, its key puts the countersteer on at least as fast as the free wheel follows.
+    const r = catchOpen(s, c) === sd && sd * s.st >= 0 ? Math.max(kr, follow) : kr;
+    s.st = Math.max(-1, Math.min(1, s.st + sd * r));
+  }
   // S005-T2: with no steering key pressed the wheel returns towards centre, pulled by the front tyres' self-aligning
   // torque (centreRate). It only acts while that torque points to centre (front slip opposite to the steering), never
   // moves the wheel past centre, and never acts while a key is held, so it cannot fight the driver or overshoot.
@@ -37,16 +47,20 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   // opens (holdOpen 0 -> 1) at the key rate while a key on that side is held, so a held key steers again like any held
   // key; it ends when fully open or when the wheel is back at centre. A slide reopening on that side makes it catch again
   // (the cap closes at the key rate). Absent when not holding, so runs without a catch hash as before.
+  // S005-T14 (m8): once the catch key is let go (or the other key pressed) it is catching after a release (+-3, with
+  // steerCatchRepress); pressing it again after the slide has closed (body slip back through zero) then opens the cap
+  // at once, so a release and re-press or a feint steers into a transition, while a key held through keeps the hold.
   let hk = Math.sign(s.hold ?? 0), phase = Math.abs(s.hold ?? 0), open = s.holdOpen ?? 0;
   if (sd && sd !== hk && Math.sign(s.ar) === sd && Math.sign(s.beta) === sd && Math.abs(s.beta) > c.counterBetaOnset) {
     hk = sd; phase = 1; open = 0;
   }
   if (hk) {
-    const rate = dt / steerLockTime(c, s.v), slideOpen = hk * s.beta > c.counterBetaOnset;
-    if (phase === 1 && !slideOpen && hk * s.r <= c.steerCatchSettleYaw) phase = 2;
+    const slideOpen = hk * s.beta > c.counterBetaOnset;
+    if (phase === 1 && sd !== hk && c.steerCatchRepress > 0) phase = 3;
+    if (phase !== 2 && !slideOpen && (hk * s.r <= c.steerCatchSettleYaw || (phase === 3 && sd === hk && hk * s.beta <= 0))) phase = 2;
     else if (phase === 2 && slideOpen) phase = 1;
-    if (phase === 2 && sd === hk) open = Math.min(1, open + rate);
-    else open = Math.max(0, open - rate); // catching, or that key let go: the cap closes again at the key rate
+    if (phase === 2 && sd === hk) open = Math.min(1, open + kr);
+    else open = Math.max(0, open - kr); // catching, or that key let go: the cap closes again at the key rate
     if (phase === 2 && (open >= 1 || Math.sign(s.st) !== hk)) hk = 0;
   }
   if (hk) { s.hold = hk * phase; s.holdOpen = open; }
@@ -62,12 +76,16 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
     // S005-T8 (M5): the slip is read at the rear axle, not the body: in a tight slow turn the body slip is geometry (the
     // rear axle rolls straight, so the centre of mass points inwards) and is no slide. Below DRIFT_MIN_SPEED it never
     // counts (as for drifts), which also skips the rear slip left by the switch from the low-speed branch near 11 km/h.
-    const slide = s.v > DRIFT_MIN_SPEED && Math.abs(s.ar) > Math.min(c.steerSlideBeta, c.tirePeakSlip);
+    // S005-T14 (M1): not for countersteer an open catch keeps in check: that follows the slide instead (steerCatchFollow,
+    // like a free wheel pulled by its caster), or with steerCatchFollow 0 returns at the normal rate, so taps add up.
+    const slide = slideReturn(s, c), hs = catchOpen(s, c);
     // S005-T8: the tyre pulls to centre while its side force points that way (fy has the steering's sign; in the slip
     // branch that is the front slip opposite the steering). The key-rate limit shrinks near centre (steerReturnSoftSteer,
     // so taps add up at speed), and a minimum return clears the slow tail (steerReturnMin; ramped in since S005-T10).
     const pull = fy * s.st > 0, minR = c.steerReturnMin * ramp;
-    if (free && s.st !== 0 && ((slide && c.steerSlideShare > 0) || pull || ramp > 0)) {
+    if (free && hs && c.steerCatchFollow > 0 && (s.st === 0 || Math.sign(s.st) === hs)) {
+      s.st = hs * Math.min(1, Math.abs(s.st) + follow / substeps);
+    } else if (free && s.st !== 0 && (slide || pull || ramp > 0)) {
       const soft = c.steerReturnSoftSteer > 0 ? Math.min(1, Math.abs(s.st) / c.steerReturnSoftSteer) : 1;
       const tyre = pull ? Math.min(centreRate(c, fy, s.af), (c.steerReturnMaxShare * soft) / steerLockTime(c, s.v)) : 0;
       const geo = ((c.steerGeometryGain * dLim(c, s.v)) / c.maxSteer) * ramp * soft;
@@ -106,6 +124,22 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
     s.riskR += (tgtR - s.riskR) * kr;
     s.riskF += (tgtF - s.riskF) * kr;
   }
+}
+
+/** S005-T14: the side (+-1) of a catch hold still catching an open slide on that side, else 0. */
+function catchOpen(s: CarState, c: SimParams['car']): number {
+  const hk = Math.sign(s.hold ?? 0);
+  return hk && Math.abs(s.hold!) !== 2 && hk * s.beta > c.counterBetaOnset ? hk : 0;
+}
+
+/**
+ * The slide return applies (S005-T3, T8): the car slides at the rear axle above drift speed, and (S005-T14) the wheel is
+ * not countersteer that a catch hold still catching on its side keeps in check.
+ */
+function slideReturn(s: CarState, c: SimParams['car']): boolean {
+  const slide = s.v > DRIFT_MIN_SPEED && Math.abs(s.ar) > Math.min(c.steerSlideBeta, c.tirePeakSlip);
+  const held = s.hold !== undefined && Math.abs(s.hold) !== 2 && s.st !== 0 && Math.sign(s.st) === Math.sign(s.hold);
+  return slide && c.steerSlideShare > 0 && !held;
 }
 
 function noLookup(tr: Track): never {
