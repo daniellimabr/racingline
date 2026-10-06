@@ -3,7 +3,7 @@
 import type { CarState, DriftEnd, DriftRecord, DriftRun } from './state.ts';
 
 export const DRIFT_BETA = 0.25; // rad, slip angle that counts as drifting (v24 DB)
-const DRIFT_MIN_SPEED = 4; // m/s
+export const DRIFT_MIN_SPEED = 4; // m/s
 const DRIFT_MIN_TIME = 0.3; // s, shorter slides are not recorded unless they spun
 const SPIN_BETA = 1.3; // rad
 const SLOW_KMH = 18;

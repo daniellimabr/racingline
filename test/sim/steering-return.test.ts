@@ -87,7 +87,8 @@ describe('the return grows with speed and is nothing when parked (S005-AC-02)', 
 });
 
 describe('the return is weaker while the front tyres slide (S005-AC-03)', () => {
-  const FRONT_ONLY: Record<string, string[]> = { 's15-drift': ['50/-1', '100/-1'], gt3: ['50/-1'] };
+  // S005-T8: the slide is read at the rear axle past min(steerSlideBeta, peak), so the S15 at 50 km/h full lock (rear 0.10-0.12 rad) now counts as sliding.
+  const FRONT_ONLY: Record<string, string[]> = { 's15-drift': ['100/-1'], gt3: ['50/-1'] };
   /**
    * Same speed, same steering, released: the car is set with a yaw rate that puts the front slip at `k` times the
    * tyre peak (no body slip, so no countersteer lock). Returns the steering travel in the first tick, per second, and
@@ -97,7 +98,7 @@ describe('the return is weaker while the front tyres slide (S005-AC-03)', () => 
     const { s, p } = at(c, kmh), V = kmh * KMH, delta = steer(c, { ...s.car, st: st0, beta: 0 }, V);
     const r = (V * Math.tan(delta - k * c.tirePeakSlip * Math.sign(st0))) / c.la;
     const after = tick({ ...s, car: { ...s.car, st: st0, r } }, p, {});
-    return { rate: (Math.abs(st0) - Math.abs(after.car.st)) * HZ, rearSlides: Math.abs(Math.atan2(-c.lb * r, V)) > c.tirePeakSlip };
+    return { rate: (Math.abs(st0) - Math.abs(after.car.st)) * HZ, rearSlides: Math.abs(Math.atan2(-c.lb * r, V)) > Math.min(c.steerSlideBeta, c.tirePeakSlip) };
   }
   /** The tyre-driven return alone (slide return off), as AC-03 compares it. */
   const firstRate = (c: CarParams, kmh: number, st0: number, k: number): number => firstTick({ ...c, steerSlideShare: 0 }, kmh, st0, k).rate;
@@ -233,5 +234,28 @@ describe('while the car slides a released wheel returns at the key speed (S005-T
     const a = tick({ ...s, car: st }, p, {}), b = tick({ ...s, car: st }, open(on), {});
     expect(0.8 - a.car.st).toBeLessThan(0.8 - b.car.st);
     expect(0.8 - a.car.st, 'only the slow tyre return is left').toBeLessThan(0.2 / steerLockTime(on, V) / HZ);
+  });
+});
+
+// S005-T8 (blind test M5): released from full lock in a slow tight turn the wheel used to jump (S15 1.0 to 0.42 and GT3
+// 1.0 to 0.71-0.81 in 0.1 s at 12-25 km/h), because the 7-13 deg body slip of a tight turn is geometry but started the
+// slide return. The slide is now read at the rear axle and needs drift speed, so the return is smooth there.
+describe('no jump when a slow tight turn is released (S005-T8 M5)', () => {
+  it.each(cars)('%s: from full lock at 12-40 km/h the wheel moves at most 0.12 in the first 0.1 s, towards centre', (_n, car) => {
+    const c = car();
+    for (const kmh of [12, 15, 20, 25, 30, 40]) {
+      let { s, p } = at(c, kmh);
+      const v = kmh * KMH;
+      // Right key 1.5 s with a gentle ideal throttle that holds speed without wheelspin, then no keys and no pedals.
+      for (let i = 0; i < 1.5 * HZ; i++) s = tick({ ...s, car: { ...s.car, t: s.car.v < v ? Math.min(1, (v - s.car.v) * 2 + 0.15) : 0 } }, p, { right: 1 });
+      expect(s.car.st, `${kmh} km/h held at full lock`).toBe(1);
+      let prev = 1;
+      for (let i = 0; i < 6; i++) {
+        s = tick(s, p, {});
+        expect(s.car.st, `${kmh} km/h tick ${i}`).toBeLessThanOrEqual(prev);
+        prev = s.car.st;
+      }
+      expect(1 - prev, `${kmh} km/h travel in the first 0.1 s`).toBeLessThanOrEqual(0.12);
+    }
   });
 });

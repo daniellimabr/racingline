@@ -21,7 +21,8 @@
     "S005-T2 drift-countersteer (state, line): with no key pressed the wheel now eases back to centre (self-aligning return, S15 steerCentreGain 1.5), so between the recorded taps the steering drifts back a little; the run still ends stopped after two drifts and a spin.",
     "S005-T2 steady-corner (state, line): re-recorded from the game with key taps that hold a third of the steering while the wheel eases back between them (test/fixtures/scenarios/steady-corner.log.json), so it is a steady 43 km/h corner again instead of S004's tight 10 km/h circle at full lock; the other four scenarios never steer and keep their hashes.",
     "S005-T3 drift-countersteer (state, line): while the car slides a released wheel now returns to centre at the key speed (steerSlideBeta 0.1, steerSlideShare 1, Main Dev option 1B), so between the recorded taps the countersteer unwinds sooner; the run still ends stopped after the same two drifts (a spin and a 25 deg drift); the GT3 brake balance is in no recording and the other five keep their hashes.",
-    "S005-T8 braking (state, line): with the brake held below 0.3 m/s the brake now holds the car as static friction (blind test M1), so the recorded stop ends at rest 0.17 m sooner instead of creeping on at 1.03 km/h; the other five keep their hashes."
+    "S005-T8 braking (state, line): with the brake held below 0.3 m/s the brake now holds the car as static friction (blind test M1), so the recorded stop ends at rest 0.17 m sooner instead of creeping on at 1.03 km/h; the other five keep their hashes.",
+    "S005-T8 drift-countersteer (state, line): the slide return of option 1B now reads the slip at the rear axle and needs drift speed (blind test M5: the geometric body slip of a slow tight turn is no slide), so the recorded run unwinds slightly differently and ends 0.04 m away, stopped after the same spin and grip drift; the other five keep their hashes."
   ],
   "scenarios": {
     "braking": {
@@ -29,8 +30,8 @@
       "line": "6d5e7bb710958cb5"
     },
     "drift-countersteer": {
-      "state": "9e5827fa419a2cc4",
-      "line": "d5dffbad562475fd"
+      "state": "9cabc0afb2193e09",
+      "line": "a7b45597f656af0b"
     },
     "manual-shift": {
       "state": "4e550d96a236874f",
