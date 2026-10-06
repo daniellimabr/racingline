@@ -46,6 +46,11 @@ describe('steering rate depends on speed (S004-AC-03)', () => {
     expect(steerLockTime(base, 0)).toBe(base.steerLockTime);
   });
 
+  it('the return to centre (S005-T2) never changes the key rate (S005-AC-04)', () => {
+    const strong = loadCarParams({ ...s15Json, steerCentreGain: 15 }, 'test.json');
+    for (const kmh of SPEEDS) expect(lockTime(strong, kmh), `${kmh} km/h`).toBe(lockTime(s15(), kmh));
+  });
+
   it('reverse uses the speed size, and above the top speed the time stays at the top value', () => {
     for (const c of [s15(), gt3()]) {
       for (const v of [1, 10, 40, 83]) expect(steerLockTime(c, -v)).toBe(steerLockTime(c, v));

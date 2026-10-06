@@ -17,7 +17,9 @@
     "S004-T2 Main Dev call, S15 steering curve 2 -> 3 (quicker through drift speeds): drift-countersteer and steady-corner (state, line) change again; the S15 reaches full lock sooner in both recordings. The other four scenarios never steer.",
     "S004-T3 braking (state, line): S15 tyre load sensitivity 0.5 (grip per unit of load falls as an axle gains load), so the front gains less grip from the forward weight shift and straight stops are about 4-6% longer (100-0 km/h 51.5 -> 53.8 m).",
     "S004-T3 drift-countersteer and steady-corner (state, line): the same S15 load sensitivity changes the cornering balance under weight transfer, so both steering recordings run differently; manual-shift, straight-accel and wobble keep their hashes (traction is unchanged).",
-    "S004-T11 drift-countersteer and steady-corner (state, line): the S15 rear cornering margin 1.05 -> 1.15 (and wheelspin side-grip loss from 0.2) makes it settle at the limit, so the drift recording ends after two drifts instead of three and the tight circle differs slightly; the GT3 load sensitivity is not in any recording; the other four keep their hashes."
+    "S004-T11 drift-countersteer and steady-corner (state, line): the S15 rear cornering margin 1.05 -> 1.15 (and wheelspin side-grip loss from 0.2) makes it settle at the limit, so the drift recording ends after two drifts instead of three and the tight circle differs slightly; the GT3 load sensitivity is not in any recording; the other four keep their hashes.",
+    "S005-T2 drift-countersteer (state, line): with no key pressed the wheel now eases back to centre (self-aligning return, S15 steerCentreGain 1.5), so between the recorded taps the steering drifts back a little; the run still ends stopped after two drifts and a spin.",
+    "S005-T2 steady-corner (state, line): re-recorded from the game with key taps that hold a third of the steering while the wheel eases back between them (test/fixtures/scenarios/steady-corner.log.json), so it is a steady 43 km/h corner again instead of S004's tight 10 km/h circle at full lock; the other four scenarios never steer and keep their hashes."
   ],
   "scenarios": {
     "braking": {
@@ -25,16 +27,16 @@
       "line": "528c5e430fd58be5"
     },
     "drift-countersteer": {
-      "state": "edfe92d394f5e25b",
-      "line": "940b7c7d853f4489"
+      "state": "111dff5b7aa319d2",
+      "line": "d112036ff5a7ed53"
     },
     "manual-shift": {
       "state": "4e550d96a236874f",
       "line": "0aa58c7a8adadb05"
     },
     "steady-corner": {
-      "state": "951a6313ba77ba2e",
-      "line": "621f15d1be48966f"
+      "state": "d6614951182fcb6e",
+      "line": "56e5f97038560b25"
     },
     "straight-accel": {
       "state": "8c4f93751f83dc07",
