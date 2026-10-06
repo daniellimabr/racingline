@@ -121,6 +121,13 @@ export function phys(s: CarState, dt: number, p: SimParams, surf: AxleSurface): 
     s.ar = 0;
     const ax = Fxr + Fxf + dx;
     s.vx += ax * dt;
+    // S005-T8 (M1): below 0.3 m/s the brakes above are off (mv), so a held brake left the car creeping at about
+    // 1 km/h. There a held brake acts as static friction: it takes up to its full force out of the speed, never
+    // reversing it, so the car comes to rest and stays there (against the drive too, up to the brake force).
+    if (!mv && D > 0) {
+      const hold = (c.brakeFront + c.brakeRear) * D * dt;
+      s.vx = Math.abs(s.vx) <= hold ? 0 : s.vx - Math.sign(s.vx) * hold;
+    }
     s.axp = ax;
     s.useF = fLong;
     s.useR = rLong;
