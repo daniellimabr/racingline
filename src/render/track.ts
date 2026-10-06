@@ -4,6 +4,7 @@
 import type { Track, TrackLine } from '../data/track.ts';
 import type { Rect } from './camera.ts';
 import { boardsFor, kerbsFor, type Board } from './boards.ts';
+import { dotInBox, drawMiniDot, type MiniDot } from './lot.ts';
 
 /** One centerline piece in world px: from point i to point i+1, with its width and distance from the start. */
 export interface Segment {
@@ -209,6 +210,12 @@ function drawBoards(c: CanvasRenderingContext2D, art: TrackArt, view: Rect): voi
   c.textBaseline = 'alphabetic';
 }
 
+/** The car dot on the track minimap (screen px), held on the minimap's edge nearest the car when it is far off (S004-T10). */
+export function trackMiniDot(art: TrackArt, carX: number, carY: number): MiniDot {
+  const { k, ox, oy } = art.mini;
+  return dotInBox(MINI, carX * k + ox, carY * k + oy);
+}
+
 /** Minimap of the whole circuit (screen px) with the car as a dot. */
 export function drawTrackMinimap(c: CanvasRenderingContext2D, art: TrackArt, carX: number, carY: number, carColor: string): void {
   const { k, ox, oy } = art.mini, pts = art.track.points;
@@ -227,9 +234,6 @@ export function drawTrackMinimap(c: CanvasRenderingContext2D, art: TrackArt, car
   c.moveTo(st.a[0] * k + ox, st.a[1] * k + oy);
   c.lineTo(st.b[0] * k + ox, st.b[1] * k + oy);
   c.stroke();
-  c.fillStyle = carColor;
-  c.beginPath();
-  c.arc(carX * k + ox, carY * k + oy, 3.5, 0, 7);
-  c.fill();
+  drawMiniDot(c, trackMiniDot(art, carX, carY), carColor);
   c.restore();
 }

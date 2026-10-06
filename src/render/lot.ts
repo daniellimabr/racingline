@@ -130,12 +130,15 @@ function grassTile(make: CanvasFactory): CanvasImageSource {
   return tc as unknown as CanvasImageSource;
 }
 
-/** Top-left corners of the grass tiles that cover `view` (world px) outside the lot picture. */
-export function grassTiles(view: Rect): [number, number][] {
+/**
+ * Top-left corners of the grass tiles that cover `view` (world px), leaving out the lot picture; with
+ * `aroundLot` false (a track's grass, S004-T10) the tiles cover the whole view.
+ */
+export function grassTiles(view: Rect, aroundLot = true): [number, number][] {
   const T = GRASS_TILE, out: [number, number][] = [];
   for (let ty = Math.floor(view.y0 / T) * T; ty <= view.y1; ty += T) {
     for (let tx = Math.floor(view.x0 / T) * T; tx <= view.x1; tx += T) {
-      if (tx >= 0 && tx < WORLD_W && ty >= 0 && ty < WORLD_H) continue; // the picture covers it
+      if (aroundLot && tx >= 0 && tx < WORLD_W && ty >= 0 && ty < WORLD_H) continue; // the picture covers it
       out.push([tx, ty]);
     }
   }
@@ -143,12 +146,33 @@ export function grassTiles(view: Rect): [number, number][] {
 }
 
 /** Car dot on the lot minimap (screen px), held on the minimap's edge towards the car when it is off the picture. */
-export function lotMiniDot(wx: number, wy: number): { x: number; y: number; inside: boolean } {
+export function lotMiniDot(wx: number, wy: number): MiniDot {
   const m = LOT_MINI.w / WORLD_W, inside = wx >= 0 && wx <= WORLD_W && wy >= 0 && wy <= WORLD_H;
+  return { ...dotInBox(LOT_MINI, LOT_MINI.x + wx * m, LOT_MINI.y + wy * m), inside };
+}
+
+/** A minimap car dot in screen px; `inside` false means it is held on the edge and drawn with a ring. */
+export interface MiniDot {
+  x: number;
+  y: number;
+  inside: boolean;
+}
+
+/** Holds a dot at (x, y) screen px inside `box`, on the edge nearest to it; `inside` tells whether it fitted. */
+export function dotInBox(box: { x: number; y: number; w: number; h: number }, x: number, y: number): MiniDot {
   const clamp = (v: number, lo: number, hi: number): number => Math.min(hi - MINI_DOT, Math.max(lo + MINI_DOT, v));
-  return {
-    x: clamp(LOT_MINI.x + wx * m, LOT_MINI.x, LOT_MINI.x + LOT_MINI.w),
-    y: clamp(LOT_MINI.y + wy * m, LOT_MINI.y, LOT_MINI.y + LOT_MINI.h),
-    inside,
-  };
+  const cx = clamp(x, box.x, box.x + box.w), cy = clamp(y, box.y, box.y + box.h);
+  return { x: cx, y: cy, inside: cx === x && cy === y };
+}
+
+/** Draws the car dot; off the map it waits on the edge with a white ring (S004-T6 lot, S004-T10 tracks). */
+export function drawMiniDot(c: CanvasRenderingContext2D, dot: MiniDot, color: string): void {
+  c.fillStyle = color;
+  c.beginPath();
+  c.arc(dot.x, dot.y, MINI_DOT, 0, 7);
+  c.fill();
+  if (dot.inside) return;
+  c.strokeStyle = '#f4f1ea';
+  c.lineWidth = 1.5;
+  c.stroke();
 }

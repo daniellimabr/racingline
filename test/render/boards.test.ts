@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { centerlineAt, nearestOnCenterline, type ApexKerb, type BrakePoint, type Track, type TrackPoint } from '../../src/data/track.ts';
 import { TRACKS } from '../../src/tracks/index.ts';
-import { BOARD_DISTANCES, boardsFor, kerbsFor, MIN_BRAKE_GAP } from '../../src/render/boards.ts';
+import { BOARD_DISTANCES, boardsFor, kerbsFor, STRAIGHT_LOOK, STRAIGHT_MAX_TURN } from '../../src/render/boards.ts';
 import { buildTrackArt, drawTrack } from '../../src/render/track.ts';
 import { recordingContext } from './canvas-stub.ts';
 
@@ -41,11 +41,11 @@ const vergeTotal = interlagos.verge.reduce((sum, b) => sum + b.width, 0);
 
 describe('distance boards', () => {
   it('stand 200, 150, 100 and 50 m before each braking point, in that order', () => {
-    const t = rectangle(false, { brakePoints: [{ s: 900, name: 'Curva 2' }, { s: 1500, name: 'Curva 3' }] });
+    const t = rectangle(false, { brakePoints: [{ s: 1000, name: 'Curva 2' }, { s: 1500, name: 'Curva 3' }] });
     const boards = boardsFor(t);
     expect(BOARD_DISTANCES).toEqual([200, 150, 100, 50]);
     expect(boards.map((b) => [b.s, b.label, b.corner])).toEqual([
-      [700, '200', 'Curva 2'], [750, '150', 'Curva 2'], [800, '100', 'Curva 2'], [850, '50', 'Curva 2'],
+      [800, '200', 'Curva 2'], [850, '150', 'Curva 2'], [900, '100', 'Curva 2'], [950, '50', 'Curva 2'],
       [1300, '200', 'Curva 3'], [1350, '150', 'Curva 3'], [1400, '100', 'Curva 3'], [1450, '50', 'Curva 3'],
     ]);
   });
@@ -89,22 +89,20 @@ describe('distance boards', () => {
     expect(boardsFor(rectangle(false, {}))).toEqual([]);
   });
 
-  it(`skip a braking point less than ${MIN_BRAKE_GAP} m after the previous one, wrapping round the lap`, () => {
-    expect(MIN_BRAKE_GAP).toBe(300);
-    // 1100 is 200 m after 900: no boards. 1400 is 300 m after 1100: boards (the gap counts from any braking point).
-    const t = rectangle(false, { brakePoints: [{ s: 900, name: 'A' }, { s: 1100, name: 'B' }, { s: 1400, name: 'C' }] });
-    expect([...new Set(boardsFor(t).map((b) => b.corner))]).toEqual(['A', 'C']);
-    // 80 is 250 m after 3030 of the previous lap: no boards; 3030 itself keeps its boards.
-    const w = rectangle(false, { brakePoints: [{ s: 80, name: 'first' }, { s: 1500, name: 'mid' }, { s: 3030, name: 'last' }] });
-    expect([...new Set(boardsFor(w).map((b) => b.corner))]).toEqual(['mid', 'last']);
-    // A lone braking point always gets its boards.
-    expect(boardsFor(rectangle(false, { brakePoints: [{ s: 80, name: 'only' }] }))).toHaveLength(4);
+  it(`stand only where the road turns less than ${STRAIGHT_MAX_TURN} degrees within ${STRAIGHT_LOOK} m either side`, () => {
+    expect([STRAIGHT_LOOK, STRAIGHT_MAX_TURN]).toEqual([25, 10]);
+    // The corner at s = 700 turns 90 degrees: the 200 board (s 690) stands in it and is left out; the rest stand.
+    const t = rectangle(false, { brakePoints: [{ s: 890, name: 'A' }] });
+    expect(boardsFor(t).map((b) => b.label)).toEqual(['150', '100', '50']);
+    // 26 m after the corner the road is straight again, so a board there stands.
+    expect(boardsFor(rectangle(false, { brakePoints: [{ s: 926, name: 'B' }] })).map((b) => b.s)).toEqual([726, 776, 826, 876]);
+    // A braking point whose boards all stand in a bend gets none (Laranjinha on the real file, below).
   });
 
   it('stand off the road on Interlagos for braking points spread round the lap', () => {
     const brakePoints = Array.from({ length: 12 }, (_, i) => ({ s: 150 + i * 340, name: 'C' + i }));
     const boards = boardsFor({ ...interlagos, apexKerbs: [], brakePoints });
-    expect(boards).toHaveLength(48);
+    expect(boards.length).toBeGreaterThan(12);
     for (const b of boards) {
       const near = nearestOnCenterline(interlagos, b.x, b.y);
       expect(near.distance, `board ${b.label} at s ${b.s}`).toBeGreaterThan(near.width / 2 + vergeTotal);
@@ -173,15 +171,21 @@ describe('drawing boards and kerbs', () => {
 });
 
 describe('the real Interlagos file', () => {
-  it('has boards for five corners and all 13 apex kerbs; Laranjinha is too close after Ferradura', () => {
+  it('has boards only on straight road: none inside Ferradura (all of Laranjinha) or Pinheirinho, all 13 apex kerbs', () => {
     expect(interlagos.brakePoints).toHaveLength(6);
-    const boards = boardsFor(interlagos), corners = [...new Set(boards.map((b) => b.corner))];
-    expect(boards).toHaveLength(20);
-    expect(corners).toHaveLength(5);
-    expect(corners).not.toContain('Laranjinha');
+    const boards = boardsFor(interlagos);
+    expect(boards.map((b) => [b.corner, b.label, Math.round(b.s)])).toEqual([
+      ['S do Senna', '200', 4277], ['S do Senna', '150', 27], ['S do Senna', '100', 77], ['S do Senna', '50', 127],
+      ['Descida do Lago', '200', 1052], ['Descida do Lago', '150', 1102], ['Descida do Lago', '100', 1152], ['Descida do Lago', '50', 1202],
+      ['Ferradura', '200', 1761], ['Ferradura', '150', 1811], ['Ferradura', '100', 1861], ['Ferradura', '50', 1911],
+      // Bico de Pato: 200 (s 2500) and 150 (s 2550) stand in Pinheirinho, 50 (s 2650) where Bico de Pato already bends.
+      ['Bico de Pato', '100', 2600],
+      // Junção: 200 and 150 stand in Mergulho.
+      ['Junção', '100', 3116], ['Junção', '50', 3166],
+    ]);
     expect(kerbsFor(interlagos)).toHaveLength(13);
     const art = buildTrackArt(interlagos, PX);
-    expect([art.boards.length, art.kerbs.length]).toEqual([20, 13]);
+    expect([art.boards.length, art.kerbs.length]).toEqual([15, 13]);
   });
 
   it('keeps the S do Senna 200 m board at the end of the previous lap, off the road', () => {
