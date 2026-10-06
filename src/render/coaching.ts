@@ -17,11 +17,15 @@ export const DRIFT_MSG_REAR_SLIP = 0.13;
  */
 export const DRIFT_GROW_MAX = 0.6;
 /**
- * A shown coaching line stays at least this long, s, unless "Rodou!" or the pause replaces it; a calmer line
- * takes over only once the shown one has been gone this long (S005-T9, S005-T11).
+ * A shown coaching line stays at least this long, s, unless a red warning, "Rodou!" or the pause replaces it; a
+ * calmer line takes over only once the shown one has been gone this long (S005-T9, S005-T11, S005-T13).
  */
 export const MSG_HOLD = 0.4;
-/** Rank of "Rodou!": this rank and above replace the shown line at once. */
+/** A calmer line enters only once it has been chosen this long without a break, s (S005-T13). */
+export const CALM_ENTER = 0.2;
+/** Rank of the red warnings ("passando do ponto", "saturando"): they replace any calmer line at once (S005-T13). */
+const RANK_RED = 3;
+/** Rank of "Rodou!": it replaces any other line at once. */
 const RANK_SPIN = 4;
 /** Rank of the pause line: it also leaves at once. */
 const RANK_PAUSE = 5;
@@ -97,19 +101,23 @@ export interface CoachHold {
   /** This frame's choice before the hold, and how long it has been chosen without a break, s. */
   asked: string;
   askedFor: number;
+  /** The same after the drift rule (a drift's calmer lines count as "Drift!"). */
+  wanted: string;
+  wantedFor: number;
 }
 
-export const createCoachHold = (): CoachHold => ({ shown: null, age: 0, gone: 0, asked: '', askedFor: 0 });
+export const createCoachHold = (): CoachHold => ({ shown: null, age: 0, gone: 0, asked: '', askedFor: 0, wanted: '', wantedFor: 0 });
 
 const EPS = 1e-9;
 
 /**
- * The line to show after `dt` seconds of frame time (S005-T9, S005-T11). "Rodou!" and the pause replace the shown
- * line at once, and the pause line also leaves at once. Otherwise the shown line stays at least MSG_HOLD; then a
- * more urgent line replaces it, and an equal or calmer one only once the shown line has not been chosen for
- * MSG_HOLD, so a calmer line never shows for a moment between two urgent ones. In a drift worth coaching, any other
- * line below "Rodou!" counts as "Drift!" until it has been chosen without a break for MSG_HOLD. The same text keeps
- * its age. Deterministic from the sequence of lines and frame times.
+ * The line to show after `dt` seconds of frame time (S005-T9, S005-T11, S005-T13). A red warning, "Rodou!" and the
+ * pause replace any calmer line at once, and the pause line also leaves at once. Otherwise the shown line stays at
+ * least MSG_HOLD; then a more urgent line replaces it, and an equal or calmer one only once it has been chosen
+ * CALM_ENTER without a break and the shown line has not been chosen for MSG_HOLD, so a calmer line never shows for a
+ * moment between two urgent ones. In a drift worth coaching, any line below the red warnings counts as "Drift!"
+ * until it has been chosen without a break for MSG_HOLD. The same text keeps its age. Deterministic from the
+ * sequence of lines and frame times.
  */
 export function holdLine(h: CoachHold, next: Coach, dt: number): Coach {
   const d = Math.max(0, dt);
@@ -118,16 +126,23 @@ export function holdLine(h: CoachHold, next: Coach, dt: number): Coach {
     h.asked = next.text;
     h.askedFor = d;
   }
-  const want: Coach = next.drift && next.rank < RANK_SPIN && next.text !== DRIFT_TEXT && h.askedFor < MSG_HOLD - EPS
+  const want: Coach = next.drift && next.rank < RANK_RED && next.text !== DRIFT_TEXT && h.askedFor < MSG_HOLD - EPS
     ? { text: DRIFT_TEXT, tone: 'drift', p: next.p, rank: 2, drift: true } : next;
+  if (want.text === h.wanted) h.wantedFor += d;
+  else {
+    h.wanted = want.text;
+    h.wantedFor = d;
+  }
   const cur = h.shown;
   if (cur !== null && want.text === cur.text) {
     h.shown = want; // same line, fresh colour
     h.gone = 0;
   } else {
     if (cur !== null) h.gone += d;
-    const settled = cur !== null && h.age >= MSG_HOLD - EPS && (want.rank > cur.rank || h.gone >= MSG_HOLD - EPS);
-    if (cur === null || want.rank >= RANK_SPIN || cur.rank >= RANK_PAUSE || settled) {
+    const calmIn = h.wantedFor >= CALM_ENTER - EPS && h.gone >= MSG_HOLD - EPS;
+    const settled = cur !== null && h.age >= MSG_HOLD - EPS && (want.rank > cur.rank || calmIn);
+    const urgent = cur !== null && want.rank >= RANK_RED && want.rank > cur.rank;
+    if (cur === null || urgent || want.rank >= RANK_SPIN || cur.rank >= RANK_PAUSE || settled) {
       h.shown = want;
       h.age = 0;
       h.gone = 0;
