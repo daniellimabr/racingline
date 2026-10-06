@@ -18,6 +18,9 @@ import { carStep, createCar, type CarParams, type SimParams } from '../../src/si
 import type { InputFrame } from '../../src/core/input-frame.ts';
 import { idle, KMH, open, s15 } from './gt3-helpers.ts';
 import { hashState } from '../../src/core/hash.ts';
+import { DataError } from '../../src/data/check.ts';
+import { loadCarParams } from '../../src/sim/index.ts';
+import s15Json from '../../src/cars/s15-drift.json';
 
 type S = ReturnType<typeof createState<ReturnType<typeof createCar>>>;
 const DEG = 180 / Math.PI, SPIN = 1.3, HZ = 60;
@@ -123,7 +126,7 @@ describe('S005-AC-06: S15 keyboard slide catch with the self-returning wheel', (
 // before the close onwards spun about 90 deg the other way: the full lock came back as the slide closed and threw the
 // nose round (yaw the other way 38 -> 90 deg/s at 60 km/h). With the catch hold (Main Dev option 1B) measured 0-2 deg.
 type Tester = { kmh: number; w: boolean };
-function testerCatch({ kmh, w }: Tester, late: number): { closeS: number; opposite: number; spun: boolean } {
+function testerCatch({ kmh, w }: Tester, late: number, under = 0): { closeS: number; opposite: number; spun: boolean } {
   let { s, p } = at(s15(), kmh);
   if (kmh >= 120) {
     const v = s.car.v, b = 12 / DEG;
@@ -135,11 +138,14 @@ function testerCatch({ kmh, w }: Tester, late: number): { closeS: number; opposi
   }
   const s0 = Math.sign(s.car.beta), thr = w ? 1 : 0;
   let n = 0;
+  let peak = 0;
   for (; s.car.beta * s0 > 0; n++) {
     if (n >= 600) throw new Error(`${kmh} km/h: the slide never closed`);
+    peak = Math.max(peak, s.car.beta * s0 * DEG);
+    if (under && peak > 12.5 && s.car.beta * s0 * DEG < under) break; // released on the way down, before the close
     s = tick(s, p, { right: 1, throttle: thr });
   }
-  for (let i = 0; i < Math.round(late * HZ); i++) s = tick(s, p, { right: 1, throttle: thr });
+  if (!under) for (let i = 0; i < Math.round(late * HZ); i++) s = tick(s, p, { right: 1, throttle: thr });
   let opposite = 0, spun = false;
   for (let i = 0; i < 4 * HZ; i++) {
     s = tick(s, p, { throttle: thr });
@@ -151,54 +157,171 @@ function testerCatch({ kmh, w }: Tester, late: number): { closeS: number; opposi
 const testers: Tester[] = [60, 90, 120].flatMap((kmh) => [{ kmh, w: true }, { kmh, w: false }]);
 const tname = (t: Tester): string => `${t.kmh} km/h, throttle ${t.w ? 'held' : 'off'}`;
 
-describe('S005-T10: the tester caught slide, released from the slide closing up to 0.2 s later (Main Dev option 1B)', () => {
-  it.each(testers.map((t) => [tname(t), t] as const))('%s: no spin, at most 5 deg the other way', (_n, t) => {
-    for (const late of [0, 0.05, 0.1, 0.15, 0.2]) {
+// S005-T12 (blind test round 3, Main Dev option 3A): the catch hold ends on the car's own motion, never on key presses.
+// It keeps catching while the slide on the caught side is open or the car still rotates back towards it faster than
+// steerCatchSettleYaw; then, while a key on that side is held, the lock comes back at the key rate (and closes again if
+// it is let go). Round 3 found the T10 hold kept a held key straight for ever (M1) and let each new press clear it, so
+// taps brought the full lock back and spun (M2).
+describe('S005-T10/T12: the tester caught slide (catch matrix of rounds 2 and 3)', () => {
+  it.each(testers.map((t) => [tname(t), t] as const))('%s: released under 10/8/5 deg or 0-0.3 s after the close: no spin, at most 6 deg the other way', (_n, t) => {
+    for (const under of [10, 8, 5]) {
+      const c = testerCatch(t, 0, under);
+      expect(c.spun, `released under ${under} deg`).toBe(false);
+      expect(c.opposite, `released under ${under} deg, deg the other way`).toBeLessThan(6);
+    }
+    for (const late of [0, 0.05, 0.1, 0.15, 0.2, 0.3]) {
       const c = testerCatch(t, late);
       expect(c.spun, `${late} s late`).toBe(false);
-      expect(c.opposite, `${late} s late, deg the other way`).toBeLessThan(5); // measured 0-2 deg
+      expect(c.opposite, `${late} s late, deg the other way`).toBeLessThan(6); // measured 0-5.1 deg
     }
   });
 
-  it.each(testers.map((t) => [tname(t), t] as const))('%s: the countersteer held 1 s too long ends within 3 deg', (_n, t) => {
-    const c = testerCatch(t, 1);
-    expect(c.spun).toBe(false);
-    expect(c.opposite).toBeLessThan(3); // measured 0 deg: the held key keeps the wheels straight once the slide has closed
+  // S005-T12: rewritten (T10 kept the wheels straight for as long as the key was held, so 1 s late ended within 3 deg).
+  // Now the lock comes back once the car settles, so 1 s late steers the car the other way; with full throttle at 60 km/h
+  // that spins, which is the car's own behaviour (see the straight-line test below), accepted by Main Dev.
+  const LATE_1S: Record<string, 'spin' | number> = {
+    '60 km/h, throttle held': 'spin', '60 km/h, throttle off': 3, '90 km/h, throttle held': 8, '90 km/h, throttle off': 6,
+    '120 km/h, throttle held': 8, '120 km/h, throttle off': 6,
+  };
+  it.each(testers.map((t) => [tname(t), t] as const))('%s: the countersteer held 1 s too long steers the car again (recorded)', (n, t) => {
+    const c = testerCatch(t, 1), want = LATE_1S[n]!;
+    if (want === 'spin') expect(c.spun).toBe(true);
+    else {
+      expect(c.spun).toBe(false);
+      expect(c.opposite).toBeLessThan(want);
+    }
   });
 
-  // 1B must not lock the driver out of a side-to-side drift: the same key released and pressed again steers freely.
-  it('a side-to-side drift still works when the countersteer key is released and pressed again', () => {
-    const run = (gap: number): number => {
-      let { s, p } = at(s15(), 60);
-      while (Math.abs(s.car.beta) < 12 / DEG) s = tick(s, p, { left: 1, throttle: 1 });
-      const s0 = Math.sign(s.car.beta);
-      while (s.car.beta * s0 > 0) s = tick(s, p, { right: 1, throttle: 1 });
-      for (let i = 0; i < gap; i++) s = tick(s, p, { throttle: 1 });
-      let other = 0;
-      for (let i = 0; i < 1.5 * HZ; i++) { s = tick(s, p, { right: 1, throttle: 1 }); other = Math.max(other, -s.car.beta * s0 * DEG); }
-      return other;
-    };
-    expect(run(0), 'key held through: the catch hold keeps it straight').toBeLessThan(5);
-    expect(run(3), 'released for 0.05 s and pressed again: a slide the other way').toBeGreaterThan(15);
+  // Main Dev 2026-10-06 (round 3): the S15 with full throttle spins when full lock is held for a moment at 60-70 km/h even
+  // from a straight line, before and after this sprint, so a full-throttle spin with the lock held on is the car, not the hold.
+  it.each([[60, 'right', 0.3], [70, 'left', 1]] as const)('the car itself: straight at %i km/h, full throttle, full %s lock for %s s, then let go: spins', (kmh, key, held) => {
+    let { s, p } = at(s15(), kmh), spun = false;
+    for (let i = 0; i < (held + 4) * HZ; i++) {
+      s = tick(s, p, { [key]: i < held * HZ ? 1 : 0, throttle: 1 });
+      spun ||= Math.abs(s.car.beta) > SPIN;
+    }
+    expect(spun).toBe(true);
   });
 });
 
-describe('S005-T10: the catch hold is saved state that serializes and replays exactly', () => {
-  it('a state saved during the hold and after the release continues bit-identically, and the hold clears at centre', () => {
+describe('S005-T12 M1: a key held after a settled catch steers again', () => {
+  // Tester: 90 km/h, throttle + right until 12 deg of slip, then throttle + left held. With T10 the wheels stayed at
+  // 0.00 deg and the car ran dead straight for 6 s; now the lock comes back once the car settles (measured 0.38 s).
+  it('90 km/h: 90% of the normal lock within 0.5 s of settling, and the car turns left', () => {
+    let { s, p } = at(s15(), 90);
+    const c = p.car;
+    while (Math.abs(s.car.beta) < 12 / DEG) s = tick(s, p, { right: 1, throttle: 1 });
+    const h0 = s.car.h;
+    let settled = -1, locked = -1;
+    for (let i = 0; i < 6 * HZ; i++) {
+      s = tick(s, p, { left: 1, throttle: 1 });
+      if (settled < 0 && Math.abs(s.car.hold ?? 0) === 2) settled = i;
+      const lock = Math.max(c.steerMin, c.maxSteer / (1 + s.car.v / c.steerSpeedRef));
+      if (settled >= 0 && locked < 0 && -s.car.delta > 0.9 * lock) locked = i;
+    }
+    expect(settled, 'the car settles after the catch').toBeGreaterThan(0);
+    expect(locked, 'the lock comes back').toBeGreaterThan(0);
+    expect((locked - settled) / HZ, 's from settling to 90% of the lock').toBeLessThanOrEqual(0.5);
+    expect('hold' in s.car, 'the hold has ended').toBe(false);
+    expect((h0 - s.car.h) * DEG, 'deg turned left in 6 s').toBeGreaterThan(30); // measured 58 deg (T10: 5 deg)
+  });
+});
+
+describe('S005-T12 M2: tapping the countersteer is treated like holding it', () => {
+  /** Tester: a right slide set (b0 deg, 25 deg/s into it), throttle held, the left key held or tapped (0.2 s on, 0.1 s off) for 4 s. */
+  function m2(kmh: number, b0: number, tap: boolean): { peak: number; other: number; spun: boolean } {
+    let { s, p } = at(s15(), kmh);
+    const v = s.car.v, b = -b0 / DEG;
+    s = { ...s, car: { ...s.car, vx: v * Math.cos(b), vy: v * Math.sin(b), beta: b, r: 25 / DEG, t: 1 } };
+    let peak = 0, other = 0, spun = false;
+    for (let i = 0; i < 6 * HZ; i++) {
+      const a = i < 4 * HZ && (!tap || i % 18 < 12) ? 1 : 0;
+      s = tick(s, p, { left: a, throttle: 1 });
+      peak = Math.max(peak, -s.car.beta * DEG);
+      other = Math.max(other, s.car.beta * DEG);
+      spun ||= Math.abs(s.car.beta) > SPIN;
+    }
+    return { peak, other, spun };
+  }
+
+  it.each([15, 25])('50 km/h, %i deg slide: taps and a held key both catch it with no spin', (b0) => {
+    for (const tap of [true, false]) {
+      const r = m2(50, b0, tap);
+      expect(r.spun, tap ? 'taps' : 'held').toBe(false); // T10: taps spun at 15 deg
+      expect(r.other, tap ? 'taps' : 'held').toBeLessThan(6); // measured 3.6 deg
+    }
+  });
+
+  // At 70 km/h the catch is safe, but a key kept on for 4 s brings full left lock back with full throttle, which spins the
+  // S15 even from a straight line (above); taps must never do worse than holding.
+  it.each([15, 25])('70 km/h, %i deg slide: taps never do worse than a held key', (b0) => {
+    const tap = m2(70, b0, true), held = m2(70, b0, false);
+    if (!held.spun) {
+      expect(tap.spun).toBe(false);
+      expect(tap.other).toBeLessThanOrEqual(held.other + 1);
+    }
+  });
+});
+
+describe('S005-T12 M3: side-to-side drifts reach the other side', () => {
+  // After a caught slide (60 km/h entry, right key held to the close), five ways into the other side, each coming off
+  // full throttle: the throttle stays on except where the way takes it off (a 0.3 s lift, a 0.2 s brake tap). T10 let
+  // only a release-and-press timed at zero slip through (round 3: the others reached at most 2 deg); before T10 every way
+  // spun. Measured 50-71 deg, no spin. With the throttle fully off the S15 just grips (2.4 deg in every version).
+  type Way = 'held' | 'lift' | 'feint' | 'release' | 'brake';
+  function swing(way: Way): { other: number; spun: boolean } {
+    let { s, p } = at(s15(), 60);
+    while (Math.abs(s.car.beta) < 12 / DEG) s = tick(s, p, { left: 1, throttle: 1 });
+    const s0 = Math.sign(s.car.beta);
+    while (s.car.beta * s0 > 0) s = tick(s, p, { right: 1, throttle: 1 });
+    let other = 0, spun = false;
+    for (let i = 0; i < 3 * HZ; i++) {
+      const k: Partial<InputFrame> =
+        way === 'held' ? { right: 1, throttle: 1 }
+        : way === 'lift' ? { right: 1, throttle: i < 18 ? 0 : 1 }
+        : way === 'feint' ? (i < 12 ? { left: 1, throttle: 1 } : { right: 1, throttle: 1 })
+        : way === 'release' ? (i < 6 ? { throttle: 1 } : { right: 1, throttle: 1 })
+        : i < 12 ? { right: 1, brake: 1 } : { right: 1, throttle: 1 };
+      s = tick(s, p, i < 1.5 * HZ ? k : {});
+      other = Math.max(other, -s.car.beta * s0 * DEG);
+      spun ||= Math.abs(s.car.beta) > SPIN;
+    }
+    return { other, spun };
+  }
+  it.each(['held', 'lift', 'feint', 'release', 'brake'] as const)('%s: a slide of more than 30 deg the other way, no spin', (way) => {
+    const r = swing(way);
+    expect(r.other).toBeGreaterThan(30);
+    expect(r.spun).toBe(false);
+  });
+});
+
+describe('S005-T12: the settle yaw is validated car data', () => {
+  it('rejects a negative, too large or missing settle yaw', () => {
+    for (const bad of [{ steerCatchSettleYaw: -0.1 }, { steerCatchSettleYaw: 6 }, { steerCatchSettleYaw: 'slow' }])
+      expect(() => loadCarParams({ ...s15Json, ...bad }, 'test.json'), JSON.stringify(bad)).toThrow(DataError);
+    const { steerCatchSettleYaw: _drop, ...missing } = s15Json;
+    expect(() => loadCarParams(missing, 'test.json')).toThrow(/steerCatchSettleYaw/);
+  });
+});
+
+describe('S005-T10/T12: the catch hold is saved state that serializes and replays exactly', () => {
+  it('a state saved while catching, settling and opening continues bit-identically, and the hold ends', () => {
     let { s, p } = at(s15(), 60);
     while (Math.abs(s.car.beta) < 12 / DEG) s = tick(s, p, { left: 1, throttle: 1 });
     expect('hold' in s.car, 'no hold before the countersteer').toBe(false);
-    for (let i = 0; i < 30; i++) s = tick(s, p, { right: 1, throttle: 1 });
+    for (let i = 0; i < 30; i++) s = tick(s, p, { right: 1 });
     expect(s.car.hold, 'the right key caught the slide').toBe(1);
-    const keys = [...Array(20).fill({ right: 1, throttle: 1 }), ...Array(100).fill({ throttle: 1 })] as Partial<InputFrame>[];
-    let a = s, b: S = JSON.parse(JSON.stringify(s)) as S, released = false;
+    const keys = [...Array(90).fill({ right: 1 }), ...Array(120).fill({})] as Partial<InputFrame>[];
+    let a = s, b: S = JSON.parse(JSON.stringify(s)) as S, released = false, opened = 0;
     for (const k of keys) {
       a = tick(a, p, k);
       b = tick(b, p, k);
       released ||= a.car.hold === 2;
+      opened = Math.max(opened, a.car.holdOpen ?? 0);
       expect(hashState(b)).toBe(hashState(a));
     }
-    expect(released, 'kept (as 2) after the release while the wheel unwinds').toBe(true);
-    expect('hold' in a.car, 'cleared once the wheel is back at centre').toBe(false);
+    expect(released, 'the car settled').toBe(true);
+    expect(opened, 'the held key opened the cap').toBeGreaterThan(0);
+    expect('hold' in a.car || 'holdOpen' in a.car, 'the hold has ended').toBe(false);
   });
 });

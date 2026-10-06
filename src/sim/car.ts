@@ -30,19 +30,27 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   // moves the wheel past centre, and never acts while a key is held, so it cannot fight the driver or overshoot.
   // Main Dev: it is also capped at steerReturnMaxShare (1: never faster than the key) of the key rate at the current speed, so it is never a snap.
   const free = !(k.left > 0) && !(k.right > 0), h = dt / substeps;
-  // S005-T10 (Main Dev option 1B): the catch hold read by steer(). A key pressed against a slide (rear and body slip on
-  // the key's side, past the countersteer onset) arms it (+-1). Released, or with the other key unwinding it, it stays
-  // (+-2) while the wheel is still on that side, so letting go never brings the full lock back. The same key pressed
-  // again ends it, so a release and a new press steer freely, which keeps side-to-side drifts possible. Absent when not
-  // holding, so runs without a catch hash as before.
-  let hold = s.hold ?? 0;
-  const hk = Math.sign(hold);
-  if (hold && Math.sign(s.st) !== hk && !(Math.abs(hold) === 1 && sd === hk)) hold = 0; // the wheel is back at centre
-  else if (hold && sd !== hk) hold = 2 * hk; // released, or the other key unwinding it
-  else if (Math.abs(hold) === 2) hold = 0; // the same key pressed again
-  if (!hold && sd && Math.sign(s.ar) === sd && Math.sign(s.beta) === sd && Math.abs(s.beta) > c.counterBetaOnset) hold = sd;
-  if (hold) s.hold = hold;
-  else delete s.hold;
+  // S005-T10 (Main Dev option 1B) and S005-T12 (blind test round 3): the catch hold read by steer(). A key pressed
+  // against an open slide (rear and body slip on the key's side, past the countersteer onset) arms it on that side
+  // (hold +-1, catching). It ends on the car's own motion, never on key presses: once the slide on that side is closed
+  // and the car no longer rotates back towards it faster than steerCatchSettleYaw, it is releasing (+-2) and the cap
+  // opens (holdOpen 0 -> 1) at the key rate while a key on that side is held, so a held key steers again like any held
+  // key; it ends when fully open or when the wheel is back at centre. A slide reopening on that side makes it catch again
+  // (the cap closes at the key rate). Absent when not holding, so runs without a catch hash as before.
+  let hk = Math.sign(s.hold ?? 0), phase = Math.abs(s.hold ?? 0), open = s.holdOpen ?? 0;
+  if (sd && sd !== hk && Math.sign(s.ar) === sd && Math.sign(s.beta) === sd && Math.abs(s.beta) > c.counterBetaOnset) {
+    hk = sd; phase = 1; open = 0;
+  }
+  if (hk) {
+    const rate = dt / steerLockTime(c, s.v), slideOpen = hk * s.beta > c.counterBetaOnset;
+    if (phase === 1 && !slideOpen && hk * s.r <= c.steerCatchSettleYaw) phase = 2;
+    else if (phase === 2 && slideOpen) phase = 1;
+    if (phase === 2 && sd === hk) open = Math.min(1, open + rate);
+    else open = Math.max(0, open - rate); // catching, or that key let go: the cap closes again at the key rate
+    if (phase === 2 && (open >= 1 || Math.sign(s.st) !== hk)) hk = 0;
+  }
+  if (hk) { s.hold = hk * phase; s.holdOpen = open; }
+  else { delete s.hold; delete s.holdOpen; }
   // S005-T10 (Main Dev option 2A): the steering geometry (caster and kingpin lift the car as the wheels turn) pulls a
   // free wheel back even when slow. It ramps in from steerReturnRampFrom to steerReturnMinSpeed (so there is no step),
   // fades with speed as the speed-limited lock narrows (dLim / maxSteer), and shrinks near centre like the tyre limit.
