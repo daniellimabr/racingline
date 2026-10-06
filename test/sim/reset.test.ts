@@ -114,7 +114,7 @@ describe('R reset after a cross-country shortcut (S005-AC-09)', () => {
     return { ...IDLE, throttle: c.v < speed - 0.5 ? 1 : 0, brake: c.v > speed + 1.5 ? 1 : 0, right: c.st < want ? 1 : 0, left: c.st > want ? 1 : 0 };
   }
 
-  /** Drives on the road from FROM to past 2770 m, then straight across the grass onto the section near LATER m. */
+  /** Drives on the road from FROM to past 2770 m, then across the grass until a wheel is on the section near LATER m. */
   function shortcut() {
     const run = ring();
     // An R press with the leave point moved to FROM puts the car there at rest, a quick way to reach the far side of the lap.
@@ -172,10 +172,17 @@ describe('R reset after a cross-country shortcut (S005-AC-09)', () => {
 
   it('pressed out on the grass beyond the later section, R goes back where it left the road', () => {
     const { run, start, frames, leave } = shortcut();
-    let state = replay(frames, start, run.params, carStep).state;
-    const h = state.car.h, far = { x: state.car.x + Math.cos(h) * 200, y: state.car.y + Math.sin(h) * 200 };
-    for (let i = 0; i < 600 && !state.car.off; i++) state = step(state, toward(state.car, far.x, far.y, 10), run.params, carStep);
-    expect(state.car.off).toBe(true);
+    let state = onRoad(run, replay(frames, start, run.params, carStep).state, 60); // 1 s on the later section
+    expect(state.car.rejoin, 'the catch-up is waiting').toBeGreaterThan(0);
+    // The car is then put out on the grass 20 m past the later section's far edge (set in the state, so the
+    // path there does not depend on how the steering feels) and rolls on for half a second.
+    const at = centerlineAt(track, nearestOnCenterline(track, state.car.x, state.car.y).s);
+    const here = centerlineAt(track, 2770), ox = at.x - here.x, oy = at.y - here.y, o = Math.hypot(ox, oy); // away from the first section
+    const out = at.width / 2 + 20;
+    state = { ...state, car: { ...state.car, x: at.x + (ox / o) * out, y: at.y + (oy / o) * out } };
+    state = replay(Array(30).fill(IDLE), state, run.params, carStep).state;
+    expect(state.car.off, 'out on the grass beyond the later section').toBe(true);
+    expect('rejoin' in state.car, 'leaving the road drops the catch-up').toBe(false);
     expectBackAtLeave(step(state, R, run.params, carStep).car, leave);
   });
 
