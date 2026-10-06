@@ -12,8 +12,8 @@ export type MarkedTrack = Pick<Track, 'points' | 'verge' | 'length'> & Partial<P
 /** Boards stand this far before each braking point, m, in driving order. */
 export const BOARD_DISTANCES = [200, 150, 100, 50] as const;
 /**
- * A board stands only on straight road (Main Dev, S004-T10, replacing the 300 m gap rule), and a braking point
- * shows all four boards or none (S005-T5): the road may turn
+ * A board stands only on straight road (Main Dev, S004-T10, replacing the 300 m gap rule), each board on its own,
+ * so a braking point may show only some of its four (S005-T9, replacing the all-or-none rule of T5): the road may turn
  * at most STRAIGHT_MAX_TURN degrees in total over STRAIGHT_LOOK metres either side of it. Tuned on Interlagos:
  * boards on straights turn at most 1.9 degrees there, boards inside Ferradura, Pinheirinho, Mergulho or at
  * Bico de Pato's turn-in at least 15.3; 50 m either side would also drop boards 25 m after a corner's exit.
@@ -90,11 +90,10 @@ export function boardsFor(track: MarkedTrack): Board[] {
   for (const bp of points) {
     const side = outsideOf(track, bp.s);
     const at = BOARD_DISTANCES.map((d) => (((bp.s - d) % lap) + lap) % lap);
-    // A broken set (say a lone 100) misreads as the next corner's count, so a braking point with any board off
-    // straight road gets none at all (S005-T5).
-    if (at.some((s) => turnAround(track, s) >= STRAIGHT_MAX_TURN)) continue;
     BOARD_DISTANCES.forEach((d, i) => {
-      const s = at[i]!, [x, y] = besideAt(track, s, side, (w) => w / 2 + verge + BOARD_GAP);
+      const s = at[i]!;
+      if (turnAround(track, s) >= STRAIGHT_MAX_TURN) return; // this board would stand in a bend (S005-T9)
+      const [x, y] = besideAt(track, s, side, (w) => w / 2 + verge + BOARD_GAP);
       out.push({ s, label: String(d), corner: bp.name, side, x, y });
     });
   }

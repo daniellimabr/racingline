@@ -3,6 +3,7 @@
 // from a render-only mulberry32 state here, never from the sim rng.
 import { next } from '../core/rng.ts';
 import { carLook } from './car-look.ts';
+import { createCoachHold, type CoachHold } from './coaching.ts';
 import { HALO_SPAN, HALO_THRESHOLD, type CarState, type SimParams } from '../sim/index.ts';
 
 // Axle diagram layout (screen px), shared with the HUD.
@@ -23,10 +24,11 @@ export interface View {
   tel: TelSample[];
   rng: number; // render-only rng state
   zoom: number;
+  coach: CoachHold; // shown coaching line and how long it has been up (S005-T9)
 }
 
 export const createView = (seed = 1): View => ({
-  trail: [], skids: [], smoke: [], dsm: [], tel: [], rng: seed >>> 0, zoom: 1.25,
+  trail: [], skids: [], smoke: [], dsm: [], tel: [], rng: seed >>> 0, zoom: 1.25, coach: createCoachHold(),
 });
 
 /** px, wheel offset from the car axis for skids and smoke (6.5 px on the S15, wider cars further out). */
