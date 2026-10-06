@@ -67,6 +67,7 @@ export interface CarState {
   cur: DriftRun | null; // current drift, if any
   drifts: DriftRecord[]; // last 10 finished drifts, newest first
   lap?: LapState; // lap timing, only on a track (absent on the test lot, so lot states hash as before)
+  leave?: number; // m along the centreline where the car was last on the track (R reset, S004-T5); only on a track
 }
 
 /** v24 reset(). */
