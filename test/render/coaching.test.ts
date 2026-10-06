@@ -2,13 +2,14 @@
 // throttle (Sprint 004 blind test: it showed at walking pace with no throttle). The sim's mode is read, never changed.
 import { describe, expect, it } from 'vitest';
 import { createCarRegistry } from '../../src/core/car-registry.ts';
-import { step } from '../../src/core/sim.ts';
+import { createState, step } from '../../src/core/sim.ts';
+import type { InputFrame } from '../../src/core/input-frame.ts';
 import { startRun } from '../../src/run.ts';
-import { carStep, createCar, createSimParams, loadCarParams, predict, type CarState } from '../../src/sim/index.ts';
+import { carStep, createCar, createSimParams, loadCarParams, predict, type CarState, type SimParams } from '../../src/sim/index.ts';
 import s15 from '../../src/cars/s15-drift.json';
 import gt3 from '../../src/cars/gt3.json';
 import {
-  CALM_ENTER, RED_SWAP, coachLine, coachMode, createCoachHold, DRIFT_GROW_MAX, DRIFT_MSG_KMH, DRIFT_MSG_REAR_SLIP, DRIFT_MSG_THROTTLE, holdLine, MSG_HOLD, type Coach,
+  CALM_ENTER, RED_SWAP, REAR_SHRINK_MAX, coachLine, coachMode, createCoachHold, DRIFT_GROW_MAX, DRIFT_MSG_KMH, DRIFT_MSG_REAR_SLIP, DRIFT_MSG_THROTTLE, holdLine, MSG_HOLD, type Coach,
 } from '../../src/render/coaching.ts';
 import { buildLot } from '../../src/render/lot.ts';
 import { drawScene } from '../../src/render/scene.ts';
@@ -16,6 +17,7 @@ import { createView, type View } from '../../src/render/view.ts';
 import { TRACKS } from '../../src/tracks/index.ts';
 import { deepFreeze } from '../core/helpers.ts';
 import { autopilot } from '../sim/autopilot.ts';
+import { idle, KMH, open, s15 as s15Car } from '../sim/gt3-helpers.ts';
 import { factoryFor, recordingContext } from './canvas-stub.ts';
 
 const params = createSimParams(loadCarParams(s15, 's15-drift.json'));
@@ -339,4 +341,82 @@ describe('the coaching line on real Interlagos launches (S005-T11, S005-T13, S00
       });
     }
   }
+});
+
+// S005-T17 (blind round 5, m1 and the largest M2 group): "Saindo de traseira — contraesterce" showed while the slide
+// was already being caught (slip -13.7 deg shrinking at 0.35 rad/s as it dropped below the sim's drift mark), and it
+// cut "Drift!" short after one frame. It now shows only while the body slip grows or holds (the sim's rate dB).
+describe('the rear-slide warning on a slide being caught (S005-T17)', () => {
+  type S = ReturnType<typeof createState<CarState>>;
+  const DEG = 180 / Math.PI, REAR = 'Saindo de traseira — contraesterce';
+  const tick = (s: S, p: SimParams, k: Partial<InputFrame>): S => step(s, { ...idle, ...k }, p, carStep);
+  /** Straight ahead at `kmh` in the automatic-box gear, settled for 20 ticks (as in the countersteer tests). */
+  function at(kmh: number): { s: S; p: SimParams } {
+    const p = open(s15Car()), c = p.car, v = kmh * KMH;
+    const rpm = (g: number): number => ((v / c.wheelRadius) * c.gears[g]! * c.finalDrive * 60) / (2 * Math.PI);
+    let g = 0;
+    while (g < c.gears.length - 1 && rpm(g) > c.autoUpRpm) g++;
+    const s0 = createState(1, createCar(p));
+    let s: S = { ...s0, car: { ...s0.car, vx: v, v, gear: g, rpm: rpm(g), rateR: v / c.wheelRadius, rateF: v / c.wheelRadius, t: 0.5 } };
+    for (let i = 0; i < 20; i++) s = tick(s, p, { throttle: s.car.v < v ? 1 : 0 });
+    return { s, p };
+  }
+  /** Tester repro on the lot: W + D to `rel` deg of slip, D let go, A pressed `late` s later and held, W held, 3 s. */
+  function repro(kmh: number, rel: number, late: number) {
+    let { s, p } = at(kmh);
+    const h = createCoachHold(), runs: [string, number][] = [], rearWhileShrinking: string[] = [];
+    const frame = (k: Partial<InputFrame>) => {
+      s = tick(s, p, k);
+      const c = coachLine(s.car, { paused: false, onTrack: false, lineSlip: predict(s.car, p).slip });
+      if (c.text === REAR && s.car.dB < -REAR_SHRINK_MAX) rearWhileShrinking.push(`${(s.car.beta * DEG).toFixed(1)} deg at ${s.car.dB.toFixed(2)} rad/s`);
+      const t = holdLine(h, c, 1 / 60).text, last = runs[runs.length - 1];
+      if (last && last[0] === t) last[1] += 1 / 60;
+      else runs.push([t, 1 / 60]);
+    };
+    for (let n = 0; Math.abs(s.car.beta) < rel / DEG; n++) {
+      if (n >= 900) throw new Error(`${kmh} km/h: W + D never reached ${rel} deg`);
+      frame({ right: 1, throttle: 1 });
+    }
+    for (let i = 0; i < Math.round(late * 60); i++) frame({ throttle: 1 });
+    for (let i = 0; i < 180; i++) frame({ left: 1, throttle: 1 });
+    return { runs, rearWhileShrinking };
+  }
+  /** Calm lines (below red) shown under CALM_ENTER before any other line (or `by`, when given) replaced them. */
+  const cutShort = (runs: [string, number][], by?: string) =>
+    runs.filter(([t, s], i) => i > 0 && i < runs.length - 1 && !REDS.has(t) && s < CALM_ENTER - 1e-6 && (by === undefined || runs[i + 1]![0] === by));
+  const caught = (beta: number, dB: number, t = 1): CarState =>
+    deepFreeze({ ...createCar(params), mode: 'rear', beta, v: 66 / 3.6, vx: 66 / 3.6, t, ar: beta, dB });
+
+  it(`uses a stated limit: a slide shrinking faster than ${REAR_SHRINK_MAX} rad/s is being caught`, () => {
+    expect(REAR_SHRINK_MAX).toBe(0.1);
+  });
+
+  it('does not show the warning on the tester\'s slide being caught (-13.7 deg shrinking at 0.35 rad/s)', () => {
+    expect(coachLine(caught(-13.7 / DEG, -0.35), opts).text).not.toBe(REAR);
+    expect(coachLine(caught(-13.7 / DEG, -0.35), opts).rank).toBeLessThan(3);
+  });
+
+  it('still shows it while the slide grows or holds', () => {
+    for (const dB of [0.5, 0, -REAR_SHRINK_MAX]) expect(coachLine(caught(-13.7 / DEG, dB), opts).text, `${dB} rad/s`).toBe(REAR);
+    expect(coachLine(drifting(15, 0, 0.35), opts).text).toBe(REAR); // lifting in a drift, slip holding
+  });
+
+  it('does not show it either when the throttle is lifted in a drift that is being caught', () => {
+    expect(coachLine(deepFreeze({ ...drifting(15, 0, 0.35), dB: -0.35 }), opts).text).not.toBe(REAR);
+  });
+
+  it('repro: lot, 66 km/h, 5 deg, W held, A 0.3 s late: no warning while shrinking and no calm line cut short', () => {
+    const { runs, rearWhileShrinking } = repro(66, 5, 0.3);
+    expect(rearWhileShrinking).toEqual([]);
+    expect(cutShort(runs), JSON.stringify(frames(runs))).toEqual([]);
+  });
+
+  it('never cuts a calm line short with the rear warning on nearby catches', () => {
+    // A red escalation ("passando do ponto") may still cut "Drift!" short (accepted in round 4); the rear warning may not.
+    for (const [kmh, rel, late] of [[62, 5, 0.3], [70, 5, 0.3], [66, 10, 0.3], [66, 5, 0.2], [66, 5, 0.5]] as const) {
+      const { runs, rearWhileShrinking } = repro(kmh, rel, late), at = `${kmh} km/h ${rel} deg ${late} s`;
+      expect(rearWhileShrinking, at).toEqual([]);
+      expect(cutShort(runs, REAR), at).toEqual([]);
+    }
+  });
 });
