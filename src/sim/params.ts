@@ -67,6 +67,9 @@ export const CAR_SCHEMA = {
   // S005-T14 (blind test round 4, M1, Main Dev choice A): while the catch is open the countersteer follows the slide like
   // a free wheel pulled by its caster, held key or not, so taps catch like a held key.
   steerCatchFollow: num(0, 4), // share of the key rate at which a caught slide's countersteer goes on (held, tapped or let go) while the slide stays open; 0 = only the held key, at the key rate, and a released countersteer returns at the normal rate · 2 (same as steerSlideShare; S15 taps within 0.7 deg of holding, were 10-30 deg worse or a spin) · tuned (S005-T14)
+  // S005-T16 (blind test round 5, M1): a let-go wheel only keeps following while the countersteer key was down recently,
+  // so steady tapping still catches like holding but one short touch no longer does the whole catch.
+  steerCatchWindow: num(0, 1), // s, a released countersteer follows the open slide only this long after its key was last down; 0 = only while held · 0.2 (S15 W held: a 1-6 tick touch spins or ends 10+ deg worse in 34 of 48 cases, was 0; taps of 0.1 s on/0.25 s off within 2.6 deg of holding; 0.15 let those taps end 6.5 deg worse) · tuned (S005-T16)
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned
   brakeRise: num(0.01, 100), // 1/s · sim() 1.1 · tuned

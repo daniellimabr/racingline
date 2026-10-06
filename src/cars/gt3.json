@@ -41,6 +41,7 @@
   "steerCatchHold": 1,
   "steerCatchSettleYaw": 0.1,
   "steerCatchFollow": 2,
+  "steerCatchWindow": 0.2,
   "throttleRise": 2,
   "throttleFall": 1.5,
   "brakeRise": 1.1,

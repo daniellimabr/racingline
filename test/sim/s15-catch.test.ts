@@ -68,7 +68,7 @@ function keyCatch(e: Entry, late: number, centre = false): Catch {
   for (let i = 0; i < late * HZ; i++) s = tick(s, p, counter);
   // S005-T14: the centring check also drops the catch hold, whose open catch would otherwise put the countersteer back.
   if (centre) {
-    const { hold: _h, holdOpen: _o, ...car } = s.car;
+    const { hold: _h, holdOpen: _o, holdKey: _k, ...car } = s.car;
     s = { ...s, car: { ...car, st: 0 } };
   }
   const stAtRelease = Math.abs(s.car.st);
