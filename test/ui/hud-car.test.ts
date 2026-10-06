@@ -41,7 +41,7 @@ function drawOnce(car: CarParams): [string, unknown[]][] {
   const lot = buildLot(factory, params.lot);
   const state = createState(1, createCar(params));
   calls.length = 0;
-  drawScene(ctx, { car: state.car, params, view: createView(1), lot, paused: false, dt: 1 / 60 });
+  drawScene(ctx, { car: state.car, params, view: createView(1), lot, paused: false, dt: 1 / 60, track: null, lap: null });
   return calls;
 }
 

@@ -6,10 +6,12 @@ import { carLook } from './car-look.ts';
 import { WORLD_W, type LotArt } from './lot.ts';
 export { carLook, type CarLook } from './car-look.ts';
 import { DIAG, DIAG_FY, DIAG_RY, type View } from './view.ts';
+import { followCamera, SCREEN_H, SCREEN_W, targetZoom, toScreen, viewRect } from './camera.ts';
+import { drawTrack, drawTrackMinimap, surfaceColor, type TrackArt } from './track.ts';
+import { lapHud, type LapHud, type LapProgress, type SectorState } from '../ui/hud-lap.ts';
+export { SCREEN_H, SCREEN_W } from './camera.ts';
 
-export const SCREEN_W = 640;
-export const SCREEN_H = 420;
-const CX = SCREEN_W / 2, CY = SCREEN_H / 2, DEG = 57.3;
+const DEG = 57.3;
 
 export interface Frame {
   car: CarState;
@@ -18,6 +20,10 @@ export interface Frame {
   lot: LotArt;
   paused: boolean;
   dt: number; // real frame time, s (camera smoothing only)
+  /** The track being driven, or null on the test lot. */
+  track: TrackArt | null;
+  /** Lap progress from the sim (null on the test lot or before lap timing exists). */
+  lap: LapProgress | null;
 }
 
 type RGB = [number, number, number];
@@ -229,18 +235,68 @@ const MODE_MSG: Record<string, string> = {
   front: 'Saindo de frente — menos direção',
 };
 
+const SECTOR_COLOR: Record<SectorState, string> = { done: '#f4f1ea', running: '#7ec8ff', todo: '#8a93a3' };
+
+/** Lap panel at the top centre: lap and time, best lap, the three sectors, the invalid mark and the last lap. */
+function drawLapPanel(c: CanvasRenderingContext2D, hud: LapHud): void {
+  const X = 192, W = 298, R = X + W - 8;
+  c.fillStyle = 'rgba(29,36,48,0.88)';
+  c.fillRect(X, 8, W, 66);
+  c.textAlign = 'left';
+  c.font = '500 13px sans-serif';
+  c.fillStyle = '#f4f1ea';
+  c.fillText(hud.title, X + 10, 28);
+  c.font = '500 16px sans-serif';
+  c.fillText(hud.time, X + 76, 28);
+  c.font = '12px sans-serif';
+  c.fillStyle = '#d6dbe3';
+  c.textAlign = 'right';
+  c.fillText(hud.best, R, 28);
+  c.textAlign = 'left';
+  hud.sectors.forEach((q, i) => {
+    const x = X + 10 + i * 96;
+    c.fillStyle = '#8a93a3';
+    c.fillText(q.label, x, 47);
+    c.fillStyle = SECTOR_COLOR[q.state];
+    c.fillText(q.time, x + 20, 47);
+  });
+  if (hud.invalid) {
+    c.font = '500 12px sans-serif';
+    c.fillStyle = '#ff6a5e';
+    c.fillText(hud.invalid, X + 10, 66);
+  }
+  if (hud.last) {
+    c.font = '12px sans-serif';
+    c.fillStyle = '#8a93a3';
+    c.textAlign = 'right';
+    c.fillText(hud.last, R, 66);
+    c.textAlign = 'left';
+  }
+}
+
+/** Map credit (ODbL, ADR-005): plain text in the bottom right corner, drawn last so nothing covers it. */
+function drawCredit(c: CanvasRenderingContext2D, credit: string): void {
+  c.font = '11px sans-serif';
+  c.textAlign = 'left';
+  const tw = c.measureText(credit).width;
+  c.fillStyle = 'rgba(29,36,48,0.8)';
+  c.fillRect(SCREEN_W - tw - 16, SCREEN_H - 21, tw + 12, 17);
+  c.fillStyle = '#f4f1ea';
+  c.fillText(credit, SCREEN_W - tw - 10, SCREEN_H - 8);
+}
+
 export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
-  const s = f.car, p = f.params, view = f.view, PX = p.lot.scale, LA = p.car.la, LB = p.car.lb;
+  const s = f.car, p = f.params, view = f.view, PX = p.lot.scale, LA = p.car.la, LB = p.car.lb, art = f.track;
   c.setTransform(1, 0, 0, 1, 0, 0);
-  c.fillStyle = '#3f7a3a';
+  c.fillStyle = art ? surfaceColor(art.track.outside) : '#3f7a3a';
   c.fillRect(0, 0, SCREEN_W, SCREEN_H);
-  // Camera: zoom out with speed, look ahead along the travel direction.
-  const zt = 1.25 - Math.min(0.55, s.v * 0.013);
-  view.zoom += (zt - view.zoom) * Math.min(1, 2 * f.dt);
-  const vd = s.h + s.beta, z = view.zoom, la = s.v * 0.35 * PX;
-  const cx = s.x * PX + Math.cos(vd) * la, cy = s.y * PX + Math.sin(vd) * la;
-  c.setTransform(z, 0, 0, z, CX - cx * z, CY - cy * z);
-  c.drawImage(f.lot.image, 0, 0);
+  // Camera: zoom out with speed, look ahead along the travel direction (render state only, in the view).
+  view.zoom += (targetZoom(s.v) - view.zoom) * Math.min(1, 2 * f.dt);
+  const cam = followCamera(s, PX, view.zoom), { cx, cy, z } = cam;
+  c.setTransform(z, 0, 0, z, SCREEN_W / 2 - cx * z, SCREEN_H / 2 - cy * z);
+  // On a track, only the pieces inside the view are drawn; the lot is one prebuilt image.
+  if (art) drawTrack(c, art, viewRect(cam, 0));
+  else c.drawImage(f.lot.image, 0, 0);
   c.fillStyle = 'rgba(15,15,15,0.4)';
   for (const q of view.skids) c.fillRect(q[0] - 1.2, q[1] - 1.2, 2.4, 2.4);
   c.lineWidth = 2;
@@ -330,11 +386,12 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   c.fillRect(fa + ov - 2, hw - 5.5, 2, 3.5);
   c.restore();
   c.setTransform(1, 0, 0, 1, 0, 0);
-  drawTach(c, s, p, (s.x * PX - cx) * z + CX, (s.y * PX - cy) * z + CY);
+  drawTach(c, s, p, ...toScreen(cam, s.x * PX, s.y * PX));
   // Axle label at the line tip: words, never a percentage above 100.
   const danger = on && ts.p > 0.75 && ts.rising;
   if (on) {
-    const lx = Math.max(200, Math.min(520, (e[0] - cx) * z + CX + 14)), ly = Math.max(130, Math.min(270, (e[1] - cy) * z + CY - 10));
+    const [ex, ey] = toScreen(cam, e[0], e[1]);
+    const lx = Math.max(200, Math.min(520, ex + 14)), ly = Math.max(130, Math.min(270, ey - 10));
     const ax = ts.rear ? 'Traseira' : 'Dianteira';
     const label = danger ? ax + ' passando do ponto' : ts.risk >= 1 ? ax + ' no limite' : ax + ' ' + pct(ts.risk) + '%' + (ts.rising ? ' ↑' : '');
     c.font = '500 12px sans-serif';
@@ -392,9 +449,9 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
     : warnMsg ?? (s.cut ? 'Corte de giro — suba marcha (.) ou alivie' : null) ?? MODE_MSG[s.mode]
       ?? (s.lockF ? 'Dianteira travada — alivie o freio'
         : s.wspin ? 'Patinando — passou do limite de tração'
-        : s.off ? 'Fora do pátio'
+        : s.off ? (art ? 'Fora da pista' : 'Fora do pátio')
         : pr.slip ? 'Linha acima da aderência — freie'
-        : ', reduz · . sobe · M automático');
+        : 'Vírgula reduz · Ponto sobe · M automático');
   c.fillStyle = warnMsg ? 'rgb(' + haloRgb(Math.max(0.2, ts.p)).join(',') + ')'
     : s.cut ? '#ff8a7e'
     : s.mode === 'spin' || s.mode === 'rear' ? '#ff8a7e'
@@ -402,21 +459,24 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
     : s.mode || s.wspin || s.lockF ? '#ffd770'
     : '#d6dbe3';
   c.fillText(msg, 24, 400);
-  // Minimap of the lot.
-  const L = f.lot.lot, m = 130 / WORLD_W;
+  // Minimap of the track or the lot.
   c.fillStyle = 'rgba(29,36,48,0.8)';
   c.fillRect(498, 8, 134, 104);
-  c.save();
-  c.translate(500, 10);
-  c.fillStyle = '#4b4f55';
-  c.fillRect(L.x0 * m, L.y0 * m, (L.x1 - L.x0) * m, (L.y1 - L.y0) * m);
-  c.fillStyle = '#ff7a1a';
-  for (const q of f.lot.cones) c.fillRect(q[0] * m - 1, q[1] * m - 1, 2, 2);
-  c.fillStyle = look.color;
-  c.beginPath();
-  c.arc(s.x * PX * m, s.y * PX * m, 3.5, 0, 7);
-  c.fill();
-  c.restore();
+  if (art) drawTrackMinimap(c, art, s.x, s.y, look.color);
+  else {
+    const L = f.lot.lot, m = 130 / WORLD_W;
+    c.save();
+    c.translate(500, 10);
+    c.fillStyle = '#4b4f55';
+    c.fillRect(L.x0 * m, L.y0 * m, (L.x1 - L.x0) * m, (L.y1 - L.y0) * m);
+    c.fillStyle = '#ff7a1a';
+    for (const q of f.lot.cones) c.fillRect(q[0] * m - 1, q[1] * m - 1, 2, 2);
+    c.fillStyle = look.color;
+    c.beginPath();
+    c.arc(s.x * PX * m, s.y * PX * m, 3.5, 0, 7);
+    c.fill();
+    c.restore();
+  }
   // Active car name under the minimap (also shown as page text next to the controls).
   c.fillStyle = 'rgba(29,36,48,0.8)';
   c.fillRect(498, 114, 134, 20);
@@ -425,4 +485,7 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   c.textAlign = 'center';
   c.fillText(hud.name, 565, 128);
   c.textAlign = 'left';
+  const lap = lapHud(f.lap);
+  if (lap) drawLapPanel(c, lap);
+  if (art) drawCredit(c, art.track.credit);
 }

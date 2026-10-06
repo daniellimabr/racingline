@@ -4,14 +4,16 @@ import { advance } from './core/accumulator.ts';
 import { createCarRegistry, switchCar } from './core/car-registry.ts';
 import { step, TICK, type SimState } from './core/sim.ts';
 import { KeyboardDevice } from './input/index.ts';
-import { carStep, createSimParams, loadCarParams, type CarState, type DriftRecord } from './sim/index.ts';
-import { startRun } from './run.ts';
+import { carStep, createSimParams, lapProgress, loadCarParams, type CarState, type DriftRecord } from './sim/index.ts';
 import { buildLot, type LotArt } from './render/lot.ts';
 import { drawScene } from './render/scene.ts';
 import { drawTelemetry } from './render/telemetry.ts';
 import { createView, recordTick, type View } from './render/view.ts';
 import { analysisHtml, driftTableHtml } from './ui/drifts.ts';
 import { carHud, rpmLegend } from './ui/hud-car.ts';
+import { buildTrackArt, type TrackArt } from './render/track.ts';
+import { bindTrackChooser } from './ui/track-chooser.ts';
+import { LOT_TRACK_ID, startRun, TRACK_CHOICES } from './run.ts';
 
 function byId<T extends HTMLElement>(id: string, type: new () => T): T {
   const el = document.getElementById(id);
@@ -40,6 +42,10 @@ const makeCanvas = (w: number, h: number) => Object.assign(document.createElemen
 let lot: LotArt = buildLot(makeCanvas, params.lot);
 const seed = () => crypto.getRandomValues(new Uint32Array(1))[0]!;
 
+let trackId = LOT_TRACK_ID, art: TrackArt | null = null;
+const arts = new Map<string, TrackArt>(); // track drawing data, built once per track
+const LOT_LABEL = cv.getAttribute('aria-label') ?? '';
+
 let state: SimState<CarState>, prev: CarState, view: View, acc = 0, alpha = 0, paused = false;
 let shownDrifts: readonly DriftRecord[] | null = null;
 
@@ -49,9 +55,14 @@ function renderDrifts(drifts: readonly DriftRecord[]): void {
   an.innerHTML = analysisHtml(drifts);
 }
 
-/** v24 reset(): new car and empty histories; the chosen car is kept. */
+/** v24 reset(): new car and empty histories; the chosen car and track are kept. */
 function reset(): void {
-  ({ state, params } = startRun({ seed: seed(), car: carId }, cars));
+  ({ state, params } = startRun({ seed: seed(), car: carId, track: trackId }, cars));
+  const track = params.track;
+  art = track ? arts.get(track.id) ?? arts.set(track.id, buildTrackArt(track, params.lot.scale)).get(track.id)! : null;
+  cv.setAttribute('aria-label', track
+    ? `Pista ${track.name} com o carro, a linha de trajetória projetada, os tempos de volta e o painel de instrumentos. Dados do mapa: ${track.credit}. Clique ou use Tab para focar e dirija com W, A, S, D.`
+    : LOT_LABEL);
   // The lot art must match the run's lot settings, whichever car started the run.
   if (params.lot !== lot.lot) lot = buildLot(makeCanvas, params.lot);
   carEl.textContent = carHud(params.car).label;
@@ -80,7 +91,7 @@ function nextCar(): void {
 }
 
 const keyboard = new KeyboardDevice(cv, { onPause: togglePause, onCarSwitch: nextCar });
-const HINT_IDLE = 'Clique no pátio para focar';
+const HINT_IDLE = 'Clique no jogo ou use Tab para focar';
 cv.addEventListener('blur', () => (msg.textContent = HINT_IDLE));
 cv.addEventListener('focus', () => (msg.textContent = 'W/S pedais · A/D direção · , reduz · . sobe · M auto · C carro · P pausa'));
 cv.addEventListener('click', () => cv.focus());
@@ -89,6 +100,11 @@ byId('ps', HTMLButtonElement).addEventListener('click', () => {
   cv.focus();
 });
 byId('rs', HTMLButtonElement).addEventListener('click', () => {
+  reset();
+  cv.focus();
+});
+bindTrackChooser(byId('tk', HTMLButtonElement), TRACK_CHOICES, trackId, (id) => {
+  trackId = id;
   reset();
   cv.focus();
 });
@@ -115,7 +131,10 @@ function loop(now: number): void {
       recordTick(view, state.car, params, TICK);
     }
   }
-  drawScene(c, { car: blended(prev, state.car, alpha), params, view, lot, paused, dt: Math.min(0.033, Math.max(0, frame)) });
+  drawScene(c, {
+    car: blended(prev, state.car, alpha), params, view, lot, paused, dt: Math.min(0.033, Math.max(0, frame)),
+    track: art, lap: lapProgress(state.car),
+  });
   drawTelemetry(t2, view, state.car.tt, darkQuery.matches, carHud(params.car).rpmScale);
   if (state.car.drifts !== shownDrifts) renderDrifts(state.car.drifts);
   requestAnimationFrame(loop);

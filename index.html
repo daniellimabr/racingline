@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RacingLine</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231d2430'/%3E%3Cpath d='M3 13 Q8 2 13 6' stroke='%235fd16b' stroke-width='2' fill='none'/%3E%3C/svg%3E">
 <!-- Layout and styles ported from prototype/prototype-v24.html (frozen reference). UI text is Portuguese, as in v24. -->
 <style>
   :root{
@@ -20,7 +21,10 @@
   .wrap{max-width:900px;margin:0 auto;padding:16px}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
   .btn{padding:4px 12px;border-radius:var(--radius);border:0.5px solid var(--border-strong);background:var(--surface-2);color:var(--text-primary);cursor:pointer}
-  #cv:focus-visible,.btn:focus-visible{outline:2px solid #3a8fd9;outline-offset:2px}
+  .btn:focus-visible{outline:2px solid #3a8fd9;outline-offset:2px}
+  /* Game keys work only while the game area has focus (intended), so its focus always shows, mouse or keyboard. */
+  #cv{outline:none}
+  #cv:focus{outline:3px solid #3a8fd9;outline-offset:3px}
   .panel{background:var(--surface-1);border:0.5px solid var(--border);border-radius:12px;padding:10px 12px}
   .key{display:inline-block;width:14px;height:3px;vertical-align:middle}
 </style>
@@ -29,12 +33,13 @@
 <main class="wrap">
 <h1 class="sr-only">RacingLine: pátio de drift com linha de trajetória projetada, halo de tração, diagrama dos eixos e telemetria de drift.</h1>
 <div style="padding:0.5rem 0">
-<canvas id="cv" width="640" height="420" tabindex="0" role="img" aria-label="Pátio de testes com o carro, a linha de trajetória projetada e o painel de instrumentos. Clique para focar e dirija com W, A, S, D." style="width:100%;border-radius:12px;display:block;outline:none;cursor:pointer"></canvas>
+<canvas id="cv" width="640" height="420" tabindex="0" role="img" aria-label="Pátio de testes com o carro, a linha de trajetória projetada e o painel de instrumentos. Clique para focar e dirija com W, A, S, D." style="width:100%;border-radius:12px;display:block;cursor:pointer"></canvas>
 <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:14px;color:var(--text-secondary)">
 <span id="car" aria-live="polite" style="color:var(--text-primary);font-weight:500">Carro: S15 Drift</span>
 <button id="ps" type="button" class="btn"><span id="pst">Pausar (P)</span></button>
 <button id="rs" type="button" class="btn">Reiniciar</button>
-<span id="msg" role="status" style="color:var(--text-muted)">Clique no pátio para focar</span>
+<button id="tk" type="button" class="btn">Pista: Pátio de testes</button>
+<span id="msg" role="status" style="color:var(--text-muted)">Clique no jogo ou use Tab para focar</span>
 </div>
 <div class="panel" style="margin-top:14px">
 <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-bottom:6px">
