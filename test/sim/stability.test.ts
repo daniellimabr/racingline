@@ -18,7 +18,7 @@ import type { InputFrame } from '../../src/core/input-frame.ts';
 import { gt3, idle, KMH, open, s15 } from './gt3-helpers.ts';
 
 type S = ReturnType<typeof createState<ReturnType<typeof createCar>>>;
-const DEG = 180 / Math.PI, G = 9.81, SPIN = 1.3;
+const DEG = 180 / Math.PI, G = 9.81;
 
 /** Straight ahead at `kmh` in the gear the automatic box would hold, settled for 20 ticks holding speed. */
 function at(car: CarParams, kmh: number): { s: S; p: SimParams } {
@@ -118,7 +118,9 @@ describe('finding 4: S15 keyboard catch held until the slip is under 5 deg, then
   // the slip is under 5 deg leaves the car rotating the other way at about 115 deg/s, so even an instant return to
   // centre at that moment spins (60 and 120 km/h); returning to centre when the rotation reverses catches it with
   // 0 deg (that is the whip test's key hand). No tyre or balance change moved it; it needs a steering-input decision.
-  it.each([60, 120])('at %i km/h it still swings into an opposite spin (characterized)', (kmh) => {
+  // S005-T10 (Main Dev option 1B, catch hold): settled; the held key keeps the wheels along the direction of travel and
+  // the other key unwinds them without the full lock coming back, so the swing is now 0.4 / 1.1 deg at 60 / 120 km/h.
+  it.each([60, 120])('at %i km/h the swing the other way stays under 15 deg (catch hold)', (kmh) => {
     let { s, p } = at(s15(), kmh);
     if (kmh > 100) { // 120 km/h: a growing rear slide set directly (20 deg, yaw 25 deg/s into it, wheels straight)
       const v = s.car.v, b = -20 / DEG;
@@ -133,7 +135,7 @@ describe('finding 4: S15 keyboard catch held until the slip is under 5 deg, then
     for (let n = 0; Math.sign(s.car.st) === Math.sign(stC) && s.car.st !== 0 && n < 600; n++) s = tick(s, p, back);
     let other = 0;
     for (let i = 0; i < 300; i++) { s = tick(s, p, {}); other = Math.max(other, -s.car.beta * s0); }
-    expect(other).toBeGreaterThan(SPIN); // still spins; flip to `< 15 / DEG` once Main Dev settles the catch
+    expect(other).toBeLessThan(15 / DEG); // before the catch hold: a spin (over 1.3 rad) at both speeds
   });
 });
 

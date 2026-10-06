@@ -52,6 +52,15 @@ export function steer(c: CarParams, s: CarState, spd: number): number {
     const lock = Math.min(Math.abs(sh) * c.maxSteer, Math.abs(s.beta));
     d = Math.sign(s.st) * ((1 - w) * Math.abs(d) + w * Math.max(Math.abs(d), lock));
   }
+  // S005-T10 (Main Dev option 1B, catch hold): while the key that caught a slide stays held, and after its release until
+  // the wheel is back at centre (s.hold, car.ts), the front wheels point at most along the direction of travel, less the
+  // part from the car already rotating back towards the steering (front lever x yaw rate / speed). Once the slide has
+  // closed that is straight ahead, so a countersteer held on can no longer throw the car into the opposite spin.
+  if (s.hold && c.steerCatchHold > 0 && s.st !== 0 && Math.sign(s.st) === Math.sign(s.hold)) {
+    const k = Math.sign(s.st), back = (Math.max(0, k * s.r) * c.la) / Math.max(spd, 1);
+    const cap = Math.max(0, k * s.beta - back);
+    d = k * (Math.abs(d) - c.steerCatchHold * Math.max(0, Math.abs(d) - cap));
+  }
   return d;
 }
 

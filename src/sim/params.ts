@@ -54,8 +54,15 @@ export const CAR_SCHEMA = {
   // S005-T8 (Main Dev options 4B and m1A): near centre the key-rate limit shrinks, so key taps at speed add up instead of
   // being undone between taps, and above a speed a small minimum return clears the slow tail a light tap used to leave.
   steerReturnSoftSteer: num(0, 1), // steering travel below which the return limit shrinks in proportion (limit x |st| / this); 0 = off · 0.3 (100 ms taps every 250 ms at 200 km/h reach 0.20 S15 / 0.16 GT3, was 0.18 / 0.11) · tuned (S005-T8 option 4B)
-  steerReturnMin: num(0, 1), // share of full travel per second the released wheel always returns at above steerReturnMinSpeed (unless sliding faster) · 0.1 · tuned (S005-T8 option m1A)
-  steerReturnMinSpeed: num(0, 100), // m/s, speed above which that minimum return acts · 5.556 = 20 km/h · tuned (S005-T8 option m1A)
+  steerReturnMin: num(0, 1), // share of full travel per second the released wheel always returns at from steerReturnMinSpeed (unless sliding faster) · 0.1 · tuned (S005-T8 option m1A)
+  // S005-T10 (Main Dev option 2A, blind test round 2 M2): the minimum and the geometry return ramp in between these two
+  // speeds instead of switching on at once (the step between 20 and 22 km/h), and act in full above the second.
+  steerReturnRampFrom: num(0, 100), // m/s, below this the wheel stays put (walking pace, S005-AC-02) · 0.833 = 3 km/h · tuned (S005-T10)
+  steerReturnMinSpeed: num(0, 100), // m/s, speed from which the minimum and geometry returns act in full (must be above steerReturnRampFrom) · 5 = 18 km/h (S005-T8 had a step at 20 km/h) · tuned (S005-T10 option 2A)
+  steerGeometryGain: num(0, 20), // share of full travel per second at full lock that the steering geometry (caster and kingpin lifting the car) returns, times the speed-limited lock share dLim / maxSteer, so it fades with speed; 0 = off · 2 (full lock back in about 1.3-2.2 s at 10-50 km/h, both cars) · tuned (S005-T10 option 2A)
+  // S005-T10 (Main Dev option 1B): catch hold; while the key that caught a slide is held (and until the released wheel is
+  // back at centre) the front wheels point at most along the direction of travel, so a held countersteer cannot spin the car.
+  steerCatchHold: num(0, 1), // share of the catch hold, 1 = full, 0 = off · 1 (S15 tester catch released 0-0.2 s after the slide closes: 0-4 deg the other way, was a spin) · tuned (S005-T10 option 1B)
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned
   brakeRise: num(0.01, 100), // 1/s · sim() 1.1 · tuned
@@ -122,6 +129,8 @@ export function loadCarParams(json: unknown, file: string): CarParams {
     issues.push({ path: '$.rearAxleFraction', reason: 'frontAxleFraction + rearAxleFraction must equal 1' });
   if (d.steerLockTimeTop < d.steerLockTime)
     issues.push({ path: '$.steerLockTimeTop', reason: 'must not be below steerLockTime (steering never quickens with speed)' });
+  if (!(d.steerReturnRampFrom < d.steerReturnMinSpeed))
+    issues.push({ path: '$.steerReturnRampFrom', reason: 'must be below steerReturnMinSpeed (the return ramps in between them)' });
   if (d.frontWeightMin > d.frontWeightMax) issues.push({ path: '$.frontWeightMin', reason: 'must not exceed frontWeightMax' });
   if (!(d.idleRpm < d.cutResumeRpm)) issues.push({ path: '$.idleRpm', reason: 'idleRpm must be below cutResumeRpm' });
   if (!(d.cutResumeRpm < d.cutRpm)) issues.push({ path: '$.cutResumeRpm', reason: 'cutResumeRpm must be below cutRpm' });
