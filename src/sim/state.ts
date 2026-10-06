@@ -69,6 +69,7 @@ export interface CarState {
   lap?: LapState; // lap timing, only on a track (absent on the test lot, so lot states hash as before)
   leave?: number; // m along the centreline where the car was last on the track (R reset, S004-T5); only on a track
   rejoin?: number; // s on the road far from the leave point after a shortcut (S005-T4); absent unless counting
+  hold?: number; // catch hold (S005-T10): +-1 the right/left key that caught a slide is held, +-2 released with the wheel still on that side; absent otherwise
 }
 
 /** v24 reset(). */

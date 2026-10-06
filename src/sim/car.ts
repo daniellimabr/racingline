@@ -7,7 +7,7 @@ import type { Track } from '../data/track.ts';
 import { trackDrift, DRIFT_BETA, DRIFT_MIN_SPEED } from './drift.ts';
 import { engine, manualShift } from './engine.ts';
 import { allWheelsOff, createLapState, lapStep } from './laps.ts';
-import { centreRate, phys, steerLockTime } from './physics.ts';
+import { centreRate, dLim, phys, steerLockTime } from './physics.ts';
 import { resetCar, trackLeave } from './reset.ts';
 import type { SimParams } from './params.ts';
 import type { CarState } from './state.ts';
@@ -30,6 +30,23 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   // moves the wheel past centre, and never acts while a key is held, so it cannot fight the driver or overshoot.
   // Main Dev: it is also capped at steerReturnMaxShare (1: never faster than the key) of the key rate at the current speed, so it is never a snap.
   const free = !(k.left > 0) && !(k.right > 0), h = dt / substeps;
+  // S005-T10 (Main Dev option 1B): the catch hold read by steer(). A key pressed against a slide (rear and body slip on
+  // the key's side, past the countersteer onset) arms it (+-1). Released, or with the other key unwinding it, it stays
+  // (+-2) while the wheel is still on that side, so letting go never brings the full lock back. The same key pressed
+  // again ends it, so a release and a new press steer freely, which keeps side-to-side drifts possible. Absent when not
+  // holding, so runs without a catch hash as before.
+  let hold = s.hold ?? 0;
+  const hk = Math.sign(hold);
+  if (hold && Math.sign(s.st) !== hk && !(Math.abs(hold) === 1 && sd === hk)) hold = 0; // the wheel is back at centre
+  else if (hold && sd !== hk) hold = 2 * hk; // released, or the other key unwinding it
+  else if (Math.abs(hold) === 2) hold = 0; // the same key pressed again
+  if (!hold && sd && Math.sign(s.ar) === sd && Math.sign(s.beta) === sd && Math.abs(s.beta) > c.counterBetaOnset) hold = sd;
+  if (hold) s.hold = hold;
+  else delete s.hold;
+  // S005-T10 (Main Dev option 2A): the steering geometry (caster and kingpin lift the car as the wheels turn) pulls a
+  // free wheel back even when slow. It ramps in from steerReturnRampFrom to steerReturnMinSpeed (so there is no step),
+  // fades with speed as the speed-limited lock narrows (dLim / maxSteer), and shrinks near centre like the tyre limit.
+  const ramp = Math.min(1, Math.max(0, (s.v - c.steerReturnRampFrom) / (c.steerReturnMinSpeed - c.steerReturnRampFrom)));
   for (let i = 0; i < substeps; i++) {
     const fy = phys(s, h, p, surf);
     // S005-T3 (Main Dev option 1B): while the car slides, the released wheel goes to centre at steerSlideShare of the key
@@ -40,12 +57,13 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
     const slide = s.v > DRIFT_MIN_SPEED && Math.abs(s.ar) > Math.min(c.steerSlideBeta, c.tirePeakSlip);
     // S005-T8: the tyre pulls to centre while its side force points that way (fy has the steering's sign; in the slip
     // branch that is the front slip opposite the steering). The key-rate limit shrinks near centre (steerReturnSoftSteer,
-    // so taps add up at speed), and above steerReturnMinSpeed a minimum return clears the slow tail (steerReturnMin).
-    const pull = fy * s.st > 0, minOn = s.v > c.steerReturnMinSpeed && c.steerReturnMin > 0;
-    if (free && s.st !== 0 && ((slide && c.steerSlideShare > 0) || pull || minOn)) {
+    // so taps add up at speed), and a minimum return clears the slow tail (steerReturnMin; ramped in since S005-T10).
+    const pull = fy * s.st > 0, minR = c.steerReturnMin * ramp;
+    if (free && s.st !== 0 && ((slide && c.steerSlideShare > 0) || pull || ramp > 0)) {
       const soft = c.steerReturnSoftSteer > 0 ? Math.min(1, Math.abs(s.st) / c.steerReturnSoftSteer) : 1;
       const tyre = pull ? Math.min(centreRate(c, fy, s.af), (c.steerReturnMaxShare * soft) / steerLockTime(c, s.v)) : 0;
-      const d = Math.max(tyre, minOn ? c.steerReturnMin : 0, slide ? c.steerSlideShare / steerLockTime(c, s.v) : 0) * h;
+      const geo = ((c.steerGeometryGain * dLim(c, s.v)) / c.maxSteer) * ramp * soft;
+      const d = Math.max(tyre, geo, minR, slide ? c.steerSlideShare / steerLockTime(c, s.v) : 0) * h;
       s.st = s.st > 0 ? Math.max(0, s.st - d) : Math.min(0, s.st + d);
     }
   }
