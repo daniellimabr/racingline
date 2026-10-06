@@ -14,6 +14,7 @@
 // 0.8 s, so the S15 eases into the limit and no longer weaves (S003: reverses to -1.2 deg/s, swing
 // 13.3 deg/s, period 1.4 s; now peaks at 13.9 deg/s after about 1 s, never reverses, swing 3.3 deg/s from
 // 2 to 4 s). The weave needed a quick steering step at speed, which the steering no longer gives.
+// S004-T2 Main Dev call (S15 cube curve, full lock at 200 km/h in 1.65 s): swing 6.9 deg/s from 2 to 4 s, still settles.
 import { describe, expect, it } from 'vitest';
 import { createState, step } from '../../src/core/sim.ts';
 import { carStep, createCar, type CarParams } from '../../src/sim/index.ts';
@@ -60,8 +61,8 @@ describe('yaw rate settles at 200 km/h with full lock (S002-T10)', () => {
     const r = yawAtFullLock(s15()), from2s = r.slice(2 * TICKS_PER_S);
     expectSettled(r);
     const swing = Math.max(...from2s) - Math.min(...from2s);
-    expect(swing).toBeGreaterThan(2);
-    expect(swing).toBeLessThan(5);
+    expect(swing).toBeGreaterThan(4);
+    expect(swing).toBeLessThan(8);
     expect(period(r)).toBeGreaterThan(1.2);
     expect(period(r)).toBeLessThan(1.6);
   });

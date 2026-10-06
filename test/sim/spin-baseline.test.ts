@@ -27,6 +27,8 @@
 //   GT3 150 km/h, 0.5 s: one spin, 172 deg, slide 3.7 s -> no slide, 15 deg (the steering is slower there).
 //   S15 150 km/h, 0.5 s: one spin, 253 deg -> 234 deg, slide 5.4 / 4.8 s -> 5.4 / 4.7 s.
 //   Lift-off at the limit, steering centred: no slide on either car, 3-13 deg (GT3 120 km/h no longer slides).
+// S004-T2 Main Dev call: the S15 uses the cube steering curve (quicker through drift speeds), so its 0.2 s tap
+// at 100 km/h asks for more steering: 6 -> 29 deg of rotation, still no slide; lift-off 3.5 / 4.9 deg.
 import { describe, expect, it } from 'vitest';
 import { gt3, s15 } from './gt3-helpers.ts';
 import { brakeTurn, liftOff } from './spin-scenarios.ts';
@@ -49,7 +51,7 @@ describe('spin record before and after the S003 fix (S003-AC-01)', () => {
           const o = brakeTurn(car(), kmh, hold);
           expect(o.spun).toBe(false);
           expect(o.slide).toBe(0);
-          expect(o.yaw).toBeLessThan(10);
+          expect(o.yaw).toBeLessThan(30); // S15 at 100 km/h 29 deg with the cube steering curve
         }
       }
     });
@@ -76,7 +78,7 @@ describe('spin record before and after the S003 fix (S003-AC-01)', () => {
 
   describe('lifting off at the grip limit, steering brought back to centre (S004-T2; S003 used full lock)', () => {
     it.each([
-      ['S15', 120, s15, 5.6], ['S15', 200, s15, 3.1], ['GT3', 120, gt3, 10.2], ['GT3', 200, gt3, 12.5],
+      ['S15', 120, s15, 3.5], ['S15', 200, s15, 4.9], ['GT3', 120, gt3, 10.2], ['GT3', 200, gt3, 12.5],
     ] as const)('%s at %i km/h holds its line (rotation about %s deg)', (_n, kmh, car, yaw) => {
       const o = liftOff(car(), kmh, true, true);
       expect(o.spun).toBe(false);

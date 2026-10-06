@@ -37,7 +37,7 @@ export const CAR_SCHEMA = {
   steerLockTime: num(0.02, 10), // s, centre to full lock at rest · 0.2 · tuned (S004-T2)
   steerLockTimeTop: num(0.02, 60), // s, centre to full lock at steerLockTopSpeed (not below steerLockTime) · 5 · tuned (S004-T2)
   steerLockTopSpeed: num(1, 200), // m/s, speed of steerLockTimeTop · 83.333 = 300 km/h · tuned (S004-T2)
-  steerLockCurve: num(0.5, 6), // shape of the travel time between the two: 1 straight, 2 square of speed (equal to v24's 1.3/s near 105 km/h) · 2 · tuned (S004-T2)
+  steerLockCurve: num(0.5, 6), // shape of the travel time between the two: 1 straight, 2 square of speed (equal to v24's 1.3/s near 105 km/h), 3 stays quick through drift speeds · S15 3, GT3 2 · tuned (S004-T2, Main Dev)
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned
   brakeRise: num(0.01, 100), // 1/s · sim() 1.1 · tuned

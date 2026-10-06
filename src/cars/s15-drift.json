@@ -25,7 +25,7 @@
   "steerLockTime": 0.2,
   "steerLockTimeTop": 5,
   "steerLockTopSpeed": 83.333,
-  "steerLockCurve": 2,
+  "steerLockCurve": 3,
   "throttleRise": 2,
   "throttleFall": 1.5,
   "brakeRise": 1.1,
