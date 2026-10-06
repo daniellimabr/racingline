@@ -10,6 +10,12 @@
 // settle; the S15 weave is characterized so a change to it shows up here.
 // S003-T3 (Daniel option 2B, 2026-10-05): the 5% rear cornering margin made the weave smaller and quicker
 // (before: reverses to -3.8 deg/s, swing 17.8 deg/s, period 1.8 s).
+// S004-T2: with the speed-dependent steering, full lock at 200 km/h takes about 2.4 s to reach instead of
+// 0.8 s, so the S15 eases into the limit and no longer weaves (S003: reverses to -1.2 deg/s, swing
+// 13.3 deg/s, period 1.4 s; now peaks at 13.9 deg/s after about 1 s, never reverses, swing 3.3 deg/s from
+// 2 to 4 s). The weave needed a quick steering step at speed, which the steering no longer gives.
+// S004-T2 Main Dev call (S15 cube curve, full lock at 200 km/h in 1.65 s): swing 6.9 deg/s from 2 to 4 s, still settles.
+// S004-T3 (S15 tyre load sensitivity 0.5): the yaw rate swings more, 5.0 to 15.1 deg/s from 2 to 4 s, but never reverses and dies out (6.9 to 11.7 deg/s from 4 to 8 s).
 import { describe, expect, it } from 'vitest';
 import { createState, step } from '../../src/core/sim.ts';
 import { carStep, createCar, type CarParams } from '../../src/sim/index.ts';
@@ -50,13 +56,14 @@ function period(r: number[]): number {
 describe('yaw rate settles at 200 km/h with full lock (S002-T10)', () => {
   it('GT3 (control)', () => expectSettled(yawAtFullLock(gt3())));
 
-  // Daniel 2026-10-05 chose to keep this: neutral S15 at the limit, see SPRINT-PLAN-002 T10.
-  it('S15 keeps its weave (characterization: reverses to -1.2 deg/s, swing 13.3 deg/s, period 1.4 s)', () => {
+  // Daniel 2026-10-05 chose to keep the neutral S15 (SPRINT-PLAN-002 T10); since S004-T2 the slow steering at
+  // 200 km/h no longer excites the full weave. Characterization (S004-T3): never reverses, swing 2-4 s about 10 deg/s.
+  it('S15 swings but never reverses with the speed-dependent steering (S004-T2/T3; it weaved before)', () => {
     const r = yawAtFullLock(s15()), from2s = r.slice(2 * TICKS_PER_S);
+    expect(Math.min(...r.slice(1 * TICKS_PER_S)), 'yaw rate keeps its sign').toBeGreaterThan(0);
     const swing = Math.max(...from2s) - Math.min(...from2s);
-    expect(swing).toBeGreaterThan(10);
-    expect(swing).toBeLessThan(17);
-    expect(Math.min(...r.slice(1 * TICKS_PER_S))).toBeLessThan(0); // the yaw rate briefly reverses
+    expect(swing).toBeGreaterThan(8);
+    expect(swing).toBeLessThan(12);
     expect(period(r)).toBeGreaterThan(1.2);
     expect(period(r)).toBeLessThan(1.6);
   });
