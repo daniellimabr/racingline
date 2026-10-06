@@ -10,6 +10,10 @@
 // settle; the S15 weave is characterized so a change to it shows up here.
 // S003-T3 (Daniel option 2B, 2026-10-05): the 5% rear cornering margin made the weave smaller and quicker
 // (before: reverses to -3.8 deg/s, swing 17.8 deg/s, period 1.8 s).
+// S004-T2: with the speed-dependent steering, full lock at 200 km/h takes about 2.4 s to reach instead of
+// 0.8 s, so the S15 eases into the limit and no longer weaves (S003: reverses to -1.2 deg/s, swing
+// 13.3 deg/s, period 1.4 s; now peaks at 13.9 deg/s after about 1 s, never reverses, swing 3.3 deg/s from
+// 2 to 4 s). The weave needed a quick steering step at speed, which the steering no longer gives.
 import { describe, expect, it } from 'vitest';
 import { createState, step } from '../../src/core/sim.ts';
 import { carStep, createCar, type CarParams } from '../../src/sim/index.ts';
@@ -50,13 +54,14 @@ function period(r: number[]): number {
 describe('yaw rate settles at 200 km/h with full lock (S002-T10)', () => {
   it('GT3 (control)', () => expectSettled(yawAtFullLock(gt3())));
 
-  // Daniel 2026-10-05 chose to keep this: neutral S15 at the limit, see SPRINT-PLAN-002 T10.
-  it('S15 keeps its weave (characterization: reverses to -1.2 deg/s, swing 13.3 deg/s, period 1.4 s)', () => {
+  // Daniel 2026-10-05 chose to keep the neutral S15 (SPRINT-PLAN-002 T10); since S004-T2 the slow steering at
+  // 200 km/h no longer excites the weave. Characterization: settles, swing 2-4 s about 3.3 deg/s.
+  it('S15 settles with the speed-dependent steering (S004-T2; it weaved before)', () => {
     const r = yawAtFullLock(s15()), from2s = r.slice(2 * TICKS_PER_S);
+    expectSettled(r);
     const swing = Math.max(...from2s) - Math.min(...from2s);
-    expect(swing).toBeGreaterThan(10);
-    expect(swing).toBeLessThan(17);
-    expect(Math.min(...r.slice(1 * TICKS_PER_S))).toBeLessThan(0); // the yaw rate briefly reverses
+    expect(swing).toBeGreaterThan(2);
+    expect(swing).toBeLessThan(5);
     expect(period(r)).toBeGreaterThan(1.2);
     expect(period(r)).toBeLessThan(1.6);
   });

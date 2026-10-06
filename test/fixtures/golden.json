@@ -11,7 +11,9 @@
     "S002-T10 wobble (state, line): this straight-line scenario now runs dead straight (it was 1.6 m off line from the wobble alone); the name is kept for the v24 file.",
     "S003-T3 braking: rear brake capped at 75% of rear grip (rearBrakeMaxShare, Daniel option 1B) so braking while turning no longer spins; straight stops 3-5% longer.",
     "S003-T3 drift-countersteer: rear cornering grip +5% (rearCornerGrip 1.05, Daniel option 2B) so a lift at the limit no longer spins; the recorded drift now runs differently.",
-    "S003-T3 steady-corner: rear cornering grip +5% (rearCornerGrip 1.05, Daniel option 2B) changes the cornering balance; the other three scenarios keep their hashes."
+    "S003-T3 steady-corner: rear cornering grip +5% (rearCornerGrip 1.05, Daniel option 2B) changes the cornering balance; the other three scenarios keep their hashes.",
+    "S004-T2 drift-countersteer (state, line): steering now stays where it is put with a speed-dependent rate (no self-centring), so the recorded taps leave full lock on; the car ends stopped after two drifts instead of rolling at 35 km/h after one (both runs reach spin mode).",
+    "S004-T2 steady-corner (state, line): the recorded on/off taps relied on self-centring to hold about a quarter lock; with held steering they add up to full lock, so the car ends in a tight 10 km/h circle instead of a 43 km/h corner. The other four scenarios never steer and keep their hashes."
   ],
   "scenarios": {
     "braking": {
@@ -19,16 +21,16 @@
       "line": "e0673af6647a9ce9"
     },
     "drift-countersteer": {
-      "state": "97be32e312a40dcc",
-      "line": "592fc05992ce0184"
+      "state": "339541cb62fbc100",
+      "line": "6dd98cd37edbc452"
     },
     "manual-shift": {
       "state": "4e550d96a236874f",
       "line": "0aa58c7a8adadb05"
     },
     "steady-corner": {
-      "state": "e1acb75886f0ec99",
-      "line": "b33e7b169b339a8f"
+      "state": "b2f22765b78f7838",
+      "line": "90bc014a3dd424b5"
     },
     "straight-accel": {
       "state": "8c4f93751f83dc07",

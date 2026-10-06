@@ -32,10 +32,12 @@ export const CAR_SCHEMA = {
   steerQuad: num(0, 1), // quadratic part · shape() 0.65 · tuned
   counterBetaOnset: num(0, 1.5), // rad, slip angle where countersteer lock starts · steer() 0.05 · tuned
   counterBetaFull: num(0.01, 1.5), // rad, slip angle with full countersteer lock · steer() 0.25 · tuned
-  steerRate: num(0.01, 100), // 1/s, steering travel speed · sim() 1.3 · tuned
-  steerFastRate: num(0.01, 100), // 1/s, when reversing or countersteering · sim() 3 · tuned
-  steerFastBeta: num(0, 1.5), // rad, slip angle that enables the fast rate · sim() 0.1 · tuned
-  steerReturnRate: num(0.01, 100), // 1/s, self-centering · sim() 7 · tuned
+  // Steering stays where it is put (no self-centring); its travel time depends on speed (S004-T2, Daniel
+  // 2026-10-06). Replaces v24's steerRate 1.3/s, steerFastRate 3/s and steerReturnRate 7/s.
+  steerLockTime: num(0.02, 10), // s, centre to full lock at rest · 0.2 · tuned (S004-T2)
+  steerLockTimeTop: num(0.02, 60), // s, centre to full lock at steerLockTopSpeed (not below steerLockTime) · 5 · tuned (S004-T2)
+  steerLockTopSpeed: num(1, 200), // m/s, speed of steerLockTimeTop · 83.333 = 300 km/h · tuned (S004-T2)
+  steerLockCurve: num(0.5, 6), // shape of the travel time between the two: 1 straight, 2 square of speed (equal to v24's 1.3/s near 105 km/h) · 2 · tuned (S004-T2)
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned
   brakeRise: num(0.01, 100), // 1/s · sim() 1.1 · tuned
@@ -100,6 +102,8 @@ export function loadCarParams(json: unknown, file: string): CarParams {
   const issues: { path: string; reason: string }[] = [];
   if (Math.abs(d.frontAxleFraction + d.rearAxleFraction - 1) > 1e-9)
     issues.push({ path: '$.rearAxleFraction', reason: 'frontAxleFraction + rearAxleFraction must equal 1' });
+  if (d.steerLockTimeTop < d.steerLockTime)
+    issues.push({ path: '$.steerLockTimeTop', reason: 'must not be below steerLockTime (steering never quickens with speed)' });
   if (d.frontWeightMin > d.frontWeightMax) issues.push({ path: '$.frontWeightMin', reason: 'must not exceed frontWeightMax' });
   if (!(d.idleRpm < d.cutResumeRpm)) issues.push({ path: '$.idleRpm', reason: 'idleRpm must be below cutResumeRpm' });
   if (!(d.cutResumeRpm < d.cutRpm)) issues.push({ path: '$.cutResumeRpm', reason: 'cutResumeRpm must be below cutRpm' });

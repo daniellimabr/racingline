@@ -11,6 +11,12 @@ export const G = 9.81; // m/s2 (v24 g)
 export const shape = (c: CarParams, st: number): number => c.steerLinear * st + c.steerQuad * st * Math.abs(st);
 /** Speed-limited lock, rad (v24 dLim). */
 export const dLim = (c: CarParams, v: number): number => Math.max(c.steerMin, c.maxSteer / (1 + v / c.steerSpeedRef));
+/**
+ * Seconds for the steering to travel from centre to full lock at speed v (m/s), from car data
+ * (S004-T2): low + (top - low) * (v / topSpeed) ^ curve. Very quick when slow, slow at high speed.
+ */
+export const steerLockTime = (c: CarParams, v: number): number =>
+  c.steerLockTime + (c.steerLockTimeTop - c.steerLockTime) * (v / c.steerLockTopSpeed) ** c.steerLockCurve;
 /** Normalized tire force for a slip angle (v24 tire). */
 export const tire = (c: CarParams, a: number): number => Math.sin(c.tireC * Math.atan(c.tireB * a));
 /** Engine torque, N m (v24 torqueAt). */
