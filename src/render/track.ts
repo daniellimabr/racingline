@@ -38,7 +38,7 @@ export interface TrackArt {
 }
 
 /** Board size and number height, m: the number stays above 15 screen px at the widest zoom. */
-const BOARD = { w: 6, h: 3.6, text: 2.6 } as const;
+export const BOARD = { w: 6, h: 3.6, text: 2.6 } as const;
 
 /** Surface colours by name; an unknown name draws in a neutral grey instead of failing. */
 const SURFACE_COLOR: Readonly<Record<string, string>> = { asphalt: '#4b4f55', kerb: '#e9e4d4', grass: '#3f7a3a', gravel: '#b9a77f' };
@@ -117,7 +117,7 @@ function strokeLine(c: CanvasRenderingContext2D, l: TrackLine, px: number): void
  * Draws the visible part of the track in world px (the caller has set the camera transform).
  * The background (the `outside` surface) is the caller's screen fill. Returns the number of pieces drawn.
  */
-export function drawTrack(c: CanvasRenderingContext2D, art: TrackArt, view: Rect): number {
+export function drawTrack(c: CanvasRenderingContext2D, art: TrackArt, view: Rect, covered: readonly Rect[] = []): number {
   const vis = visibleSegments(art, view).map((i) => art.segments[i]!), px = art.px;
   c.save();
   c.lineJoin = 'round';
@@ -183,16 +183,20 @@ export function drawTrack(c: CanvasRenderingContext2D, art: TrackArt, view: Rect
     c.fillStyle = '#ffc83d';
     c.fillText('S' + (i + 1), (l.a[0] + (dx / d) * 2.5) * px, (l.a[1] + (dy / d) * 2.5) * px);
   });
-  drawBoards(c, art, view);
+  drawBoards(c, art, view, covered);
   c.textAlign = 'left';
   c.restore();
   return vis.length;
 }
 
 /** Distance boards: white panels with the distance in black, upright on screen (the camera never rotates). */
-function drawBoards(c: CanvasRenderingContext2D, art: TrackArt, view: Rect): void {
-  const px = art.px, hw = (BOARD.w / 2) * px, hh = (BOARD.h / 2) * px;
-  const shown = art.boards.filter((b) => b.x * px + hw >= view.x0 && b.x * px - hw <= view.x1 && b.y * px + hh >= view.y0 && b.y * px - hh <= view.y1);
+function drawBoards(c: CanvasRenderingContext2D, art: TrackArt, view: Rect, covered: readonly Rect[]): void {
+  const px = art.px, hw = (BOARD.w / 2) * px, hh = (BOARD.h / 2) * px, lw = 0.15 * px; // lw: half the outline width
+  // Boards outside the view, or under a HUD panel (covered, world px; S005-T5), are not drawn.
+  const under = (b: Board, r: Rect): boolean =>
+    b.x * px - hw - lw < r.x1 && b.x * px + hw + lw > r.x0 && b.y * px - hh - lw < r.y1 && b.y * px + hh + lw > r.y0;
+  const shown = art.boards.filter((b) => b.x * px + hw >= view.x0 && b.x * px - hw <= view.x1 && b.y * px + hh >= view.y0 && b.y * px - hh <= view.y1
+    && !covered.some((r) => under(b, r)));
   if (shown.length === 0) return;
   c.font = '700 ' + Math.round(BOARD.text * px) + 'px sans-serif';
   c.textAlign = 'center';
