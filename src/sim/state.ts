@@ -71,6 +71,7 @@ export interface CarState {
   rejoin?: number; // s on the road far from the leave point after a shortcut (S005-T4); absent unless counting
   hold?: number; // catch hold (S005-T10, S005-T12): sign = the side whose key caught a slide; 1 catching, 2 releasing after the car settled; absent otherwise
   holdOpen?: number; // 0..1, how far the released catch cap has opened (S005-T12); present with hold
+  holdKey?: number; // s since a key on the hold's side was last down (S005-T16); present with hold
 }
 
 /** v24 reset(). */

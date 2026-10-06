@@ -29,7 +29,7 @@ function at(car: CarParams, kmh: number): { s: S; p: SimParams } {
   return { s, p };
 }
 
-type Keys = 'hold' | [on: number, off: number];
+type Keys = 'hold' | [on: number, off: number] | { touch: number };
 interface Run { peak: number; spun: boolean }
 
 /** W + D until `rel` deg of slip, D let go; A held or tapped (on/off s) from `delay` s; throttle held or lifted; 4 s. */
@@ -44,8 +44,10 @@ function release(kmh: number, rel: number, w: boolean, keys: Keys, delay = 0): R
   for (let i = 0; i < 4 * HZ; i++) {
     const j = i - d0;
     let a = 0;
-    if (j >= 0 && keys === 'hold') a = 1;
-    else if (j >= 0 && keys !== 'hold') {
+    if (j < 0) a = 0;
+    else if (keys === 'hold') a = 1;
+    else if (!Array.isArray(keys)) a = j < keys.touch ? 1 : 0;
+    else {
       const on = Math.round(keys[0] * HZ), per = on + Math.round(keys[1] * HZ);
       a = j % per < on ? 1 : 0;
     }
@@ -70,6 +72,25 @@ describe('S005-T14 M1: tapping the countersteer catches as well as holding it', 
       if (!hold.spun) expect(r.spun, `taps ${t.join('/')} s`).toBe(false);
       expect(r.peak, `taps ${t.join('/')} s, peak deg (hold ${hold.peak.toFixed(1)})`).toBeLessThan(hold.peak + 5);
     }
+  });
+});
+
+describe('S005-T16 (round 5 M1): one short touch of the countersteer does not do the whole catch', () => {
+  // Measured before T16 (steerCatchFollow 2 with no key window): a 1-6 tick touch, then no key, ended within 1.1 deg of
+  // holding A in every case, because the released wheel kept following the open slide by itself.
+  it.each([
+    [60, 30, 6], [70, 30, 6], [80, 30, 6], [90, 30, 6], [70, 20, 2], [80, 20, 2], [90, 20, 2], [60, 20, 2],
+  ] as const)('%i km/h, released at %i deg, throttle held: touches of 1 to %i ticks end at least 10 deg worse than holding', (kmh, rel, most) => {
+    const hold = release(kmh, rel, true, 'hold');
+    for (let n = 1; n <= most; n++) {
+      const r = release(kmh, rel, true, { touch: n });
+      expect(r.peak, `touch ${n} tick(s), peak deg (hold ${hold.peak.toFixed(1)})`).toBeGreaterThanOrEqual(hold.peak + 10);
+    }
+  });
+
+  it.each([60, 70, 80])('%i km/h, released at 30 deg, throttle lifted: a 1-tick touch ends at least 10 deg worse than holding', (kmh) => {
+    const hold = release(kmh, 30, false, 'hold'), r = release(kmh, 30, false, { touch: 1 });
+    expect(r.peak, `peak deg (hold ${hold.peak.toFixed(1)})`).toBeGreaterThanOrEqual(hold.peak + 10);
   });
 });
 
@@ -109,6 +130,13 @@ describe('S005-T14: the catch follow rate is validated car data', () => {
       expect(() => loadCarParams({ ...s15Json, ...bad }, 'test.json'), JSON.stringify(bad)).toThrow(DataError);
     const { steerCatchFollow: _f, ...noFollow } = s15Json;
     expect(() => loadCarParams(noFollow, 'test.json')).toThrow(/steerCatchFollow/);
+  });
+
+  it('S005-T16: rejects a negative, too long or missing key window', () => {
+    for (const bad of [{ steerCatchWindow: -0.1 }, { steerCatchWindow: 2 }, { steerCatchWindow: 'short' }])
+      expect(() => loadCarParams({ ...s15Json, ...bad }, 'test.json'), JSON.stringify(bad)).toThrow(DataError);
+    const { steerCatchWindow: _w, ...noWindow } = s15Json;
+    expect(() => loadCarParams(noWindow, 'test.json')).toThrow(/steerCatchWindow/);
   });
 
   it('with the follow off, a released countersteer under the hold returns at the normal rate and taps still add up', () => {

@@ -47,7 +47,7 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   // opens (holdOpen 0 -> 1) at the key rate while a key on that side is held, so a held key steers again like any held
   // key; it ends when fully open or when the wheel is back at centre. A slide reopening on that side makes it catch again
   // (the cap closes at the key rate). Absent when not holding, so runs without a catch hash as before.
-  let hk = Math.sign(s.hold ?? 0), phase = Math.abs(s.hold ?? 0), open = s.holdOpen ?? 0;
+  let hk = Math.sign(s.hold ?? 0), phase = Math.abs(s.hold ?? 0), open = s.holdOpen ?? 0, keyAgo = s.holdKey ?? 0;
   if (sd && sd !== hk && Math.sign(s.ar) === sd && Math.sign(s.beta) === sd && Math.abs(s.beta) > c.counterBetaOnset) {
     hk = sd; phase = 1; open = 0;
   }
@@ -58,9 +58,10 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
     if (phase === 2 && sd === hk) open = Math.min(1, open + kr);
     else open = Math.max(0, open - kr); // catching, or that key let go: the cap closes again at the key rate
     if (phase === 2 && (open >= 1 || Math.sign(s.st) !== hk)) hk = 0;
+    keyAgo = sd === hk ? 0 : keyAgo + dt; // S005-T16: time since that side's key was last down (steerCatchWindow)
   }
-  if (hk) { s.hold = hk * phase; s.holdOpen = open; }
-  else { delete s.hold; delete s.holdOpen; }
+  if (hk) { s.hold = hk * phase; s.holdOpen = open; s.holdKey = keyAgo; }
+  else { delete s.hold; delete s.holdOpen; delete s.holdKey; }
   // S005-T10 (Main Dev option 2A): the steering geometry (caster and kingpin lift the car as the wheels turn) pulls a
   // free wheel back even when slow. It ramps in from steerReturnRampFrom to steerReturnMinSpeed (so there is no step),
   // fades with speed as the speed-limited lock narrows (dLim / maxSteer), and shrinks near centre like the tyre limit.
@@ -74,12 +75,15 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
     // counts (as for drifts), which also skips the rear slip left by the switch from the low-speed branch near 11 km/h.
     // S005-T14 (M1): not for countersteer an open catch keeps in check: that follows the slide instead (steerCatchFollow,
     // like a free wheel pulled by its caster), or with steerCatchFollow 0 returns at the normal rate, so taps add up.
+    // S005-T16 (round 5 M1): it only follows while that key was down within steerCatchWindow, so steady taps keep it
+    // following but one short touch does not catch by itself; after that the released wheel returns as normal.
     const slide = slideReturn(s, c), hs = catchOpen(s, c);
+    const recent = (s.holdKey ?? Infinity) <= c.steerCatchWindow + 1e-9; // 1e-9: tick times summed in floating point
     // S005-T8: the tyre pulls to centre while its side force points that way (fy has the steering's sign; in the slip
     // branch that is the front slip opposite the steering). The key-rate limit shrinks near centre (steerReturnSoftSteer,
     // so taps add up at speed), and a minimum return clears the slow tail (steerReturnMin; ramped in since S005-T10).
     const pull = fy * s.st > 0, minR = c.steerReturnMin * ramp;
-    if (free && hs && c.steerCatchFollow > 0 && (s.st === 0 || Math.sign(s.st) === hs)) {
+    if (free && hs && recent && c.steerCatchFollow > 0 && (s.st === 0 || Math.sign(s.st) === hs)) {
       s.st = hs * Math.min(1, Math.abs(s.st) + follow / substeps);
     } else if (free && s.st !== 0 && (slide || pull || ramp > 0)) {
       const soft = c.steerReturnSoftSteer > 0 ? Math.min(1, Math.abs(s.st) / c.steerReturnSoftSteer) : 1;
