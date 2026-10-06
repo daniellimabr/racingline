@@ -20,8 +20,13 @@ export function manualShift(c: CarParams, s: CarState, d: number): void {
   shift(c, s, d);
 }
 
-/** Engine speed, rev limiter and automatic gearbox, once per tick (v24 engine). */
-export function engine(c: CarParams, s: CarState, dt: number): void {
+/**
+ * Engine speed, rev limiter and automatic gearbox, once per tick (v24 engine). `rearDrag` is the extra drag
+ * (1/s) of the surface under the rear axle: on a surface with drag, such as grass (S003-T10, Daniel option B),
+ * the spinning rear wheels keep the engine on the limiter below the road-speed upshift point, so the box also
+ * upshifts when the limiter cuts and holds its gear while the wheels spin. Tarmac and kerbs have no drag.
+ */
+export function engine(c: CarParams, s: CarState, dt: number, rearDrag = 0): void {
   s.shiftT = Math.max(0, s.shiftT - dt);
   s.shiftCd = Math.max(0, s.shiftCd - dt);
   const groundRpm = (Math.max(0, s.vx) / c.wheelRadius) * ratio(c, s.gear) * RPM2;
@@ -33,9 +38,11 @@ export function engine(c: CarParams, s: CarState, dt: number): void {
   s.rpm = Math.min(s.rpm, c.cutRpm + c.rpmOvershoot);
   if (s.rpm >= c.cutRpm) s.cut = true;
   else if (s.rpm < c.cutResumeRpm) s.cut = false;
+  const rough = rearDrag > 0;
   if (s.auto && s.shiftCd <= 0) {
-    if (groundRpm > c.autoUpRpm && s.gear < c.gears.length - 1) shift(c, s, 1);
+    if ((groundRpm > c.autoUpRpm || (rough && s.cut)) && s.gear < c.gears.length - 1) shift(c, s, 1);
     else if (
+      !(rough && s.wspin) &&
       groundRpm < c.autoDownRpm &&
       s.gear > 0 &&
       (Math.max(0, s.vx) / c.wheelRadius) * ratio(c, s.gear - 1) * RPM2 < c.autoDownMaxRpm

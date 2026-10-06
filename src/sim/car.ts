@@ -28,7 +28,7 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
     s.st = Math.max(-1, Math.min(1, s.st));
   } else s.st -= Math.sign(s.st) * Math.min(Math.abs(s.st), c.steerReturnRate * dt);
   for (let i = 0; i < substeps; i++) phys(s, dt / substeps, p, surf);
-  engine(c, s, dt);
+  engine(c, s, dt, surf.dragR);
   const ab = Math.abs(s.beta);
   s.mode =
     ab > SPIN_BETA ? 'spin'
