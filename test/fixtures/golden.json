@@ -22,7 +22,8 @@
     "S005-T2 steady-corner (state, line): re-recorded from the game with key taps that hold a third of the steering while the wheel eases back between them (test/fixtures/scenarios/steady-corner.log.json), so it is a steady 43 km/h corner again instead of S004's tight 10 km/h circle at full lock; the other four scenarios never steer and keep their hashes.",
     "S005-T3 drift-countersteer (state, line): while the car slides a released wheel now returns to centre at the key speed (steerSlideBeta 0.1, steerSlideShare 1, Main Dev option 1B), so between the recorded taps the countersteer unwinds sooner; the run still ends stopped after the same two drifts (a spin and a 25 deg drift); the GT3 brake balance is in no recording and the other five keep their hashes.",
     "S005-T8 braking (state, line): with the brake held below 0.3 m/s the brake now holds the car as static friction (blind test M1), so the recorded stop ends at rest 0.17 m sooner instead of creeping on at 1.03 km/h; the other five keep their hashes.",
-    "S005-T8 drift-countersteer (state, line): the slide return of option 1B now reads the slip at the rear axle and needs drift speed (blind test M5: the geometric body slip of a slow tight turn is no slide), so the recorded run unwinds slightly differently and ends 0.04 m away, stopped after the same spin and grip drift; the other five keep their hashes."
+    "S005-T8 drift-countersteer (state, line): the slide return of option 1B now reads the slip at the rear axle and needs drift speed (blind test M5: the geometric body slip of a slow tight turn is no slide), so the recorded run unwinds slightly differently and ends 0.04 m away, stopped after the same spin and grip drift; the other five keep their hashes.",
+    "S005-T8 drift-countersteer (state, line): Main Dev options 2B (countersteer lock at most the body slip, slide return at 2x key), 4B/m1A (return limit shrinks near centre, minimum return above 20 km/h) and 5B (slow-branch side force); the recorded open-loop drift no longer swings into a spin, so it ends rolling at 55 km/h after one grip drift instead of stopped after a spin and a drift; GT3 rear grip is in no recording; the other five keep their hashes."
   ],
   "scenarios": {
     "braking": {
@@ -30,8 +31,8 @@
       "line": "6d5e7bb710958cb5"
     },
     "drift-countersteer": {
-      "state": "9cabc0afb2193e09",
-      "line": "a7b45597f656af0b"
+      "state": "8f0dfce68c97cfda",
+      "line": "e76d5615d2d4ea79"
     },
     "manual-shift": {
       "state": "4e550d96a236874f",

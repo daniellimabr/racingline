@@ -24,7 +24,7 @@ function barWidth(car: CarState): number {
 it('the steering bar shows the sim steering angle, whatever the keys do', () => {
   // Hold right while rolling, then let go: the bar reads the car's steering, not the key, on every frame.
   let state: SimState<CarState> = createState(1, createCar(params));
-  for (let i = 0; i < 160; i++) {
+  for (let i = 0; i < 106; i++) { // S005-T8: 6 free ticks, so the wheel is still on its way back (the slide return is now 2x the key)
     state = step(state, i < 60 ? { ...idle, throttle: 1 } : i < 100 ? { ...idle, throttle: 1, right: 1 } : idle, params, carStep);
     if (i >= 60) expect(barWidth(state.car), `tick ${i}`).toBeCloseTo(Math.abs(state.car.st) * STEER_BAR.w / 2, 6);
   }

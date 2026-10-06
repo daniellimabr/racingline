@@ -77,7 +77,8 @@ const entries: Entry[] = ['60 throttle', '90 set 30', '120 set 20', '150 set 20'
 
 describe('S005-AC-06: S15 keyboard slide catch with the self-returning wheel', () => {
   // Peak yaw the other way after the release (deg/s), recorded: before option 1B 106-140 deg/s and a spin in all four.
-  const OPP_YAW: Record<Entry, number> = { '60 throttle': 46, '90 set 30': 43, '120 set 20': 50, '150 set 20': 43 };
+  // S005-T8 (option 2B: countersteer lock up to the body slip, slide return at 2x key): 46/43/50/43 -> 23/21/20/21 deg/s.
+  const OPP_YAW: Record<Entry, number> = { '60 throttle': 23, '90 set 30': 21, '120 set 20': 20, '150 set 20': 21 };
   it.each(entries)('%s: released at the catch, the wheel unwinds at key speed and there is no opposite spin', (e) => {
     const c = keyCatch(e, 0);
     expect(c.peak, 'slide caught at 20-41 deg').toBeGreaterThan(19);
@@ -94,10 +95,14 @@ describe('S005-AC-06: S15 keyboard slide catch with the self-returning wheel', (
     expect(c.opposite, 'deg the other way').toBeLessThan(3); // measured 0.1-0.9 deg
   });
 
-  it.each(entries)('%s: countersteer held 0.5 and 1 s too long spins even with an instant centring (driver timing)', (e) => {
-    for (const late of [0.5, 1]) {
-      expect(keyCatch(e, late).spun, `${late} s late`).toBe(true);
-      expect(keyCatch(e, late, true).spun, `${late} s late, centred at once`).toBe(true);
-    }
+  // S005-T8 (blind test M2, Main Dev target): a human key reaction of 0.2 s too late must not spin. Measured with 2B:
+  // 0.6/1.0/7.1/22.8 deg the other way, no spin (before 2B the S15 spun from 0.05 s late at 100-150 km/h).
+  it.each(entries)('%s: countersteer held 0.2 s too long, then released, does not spin', (e) => {
+    expect(keyCatch(e, 0.2).spun).toBe(false);
+  });
+
+  it.each(entries)('%s: countersteer held 0.5 and 1 s too long still spins (driver timing)', (e) => {
+    for (const late of [0.5, 1]) expect(keyCatch(e, late).spun, `${late} s late`).toBe(true);
+    expect(keyCatch(e, 1, true).spun, '1 s late, centred at once').toBe(true);
   });
 });

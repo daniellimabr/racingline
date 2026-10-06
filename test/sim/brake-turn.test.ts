@@ -78,7 +78,7 @@ describe('S005-AC-07: GT3 0.5 s hard brake while cornering, then released', () =
 
   it.each([100, 150, 200])('at %i km/h and 1.45 g, wheel let go after the brake: within 6 deg', (kmh) => {
     const r = brakeInCorner(kmh, 1.45, false);
-    expect(r.g, 'corner reached').toBeGreaterThan(1.4);
+    expect(r.g, 'corner reached').toBeGreaterThan(1.38); // S005-T8: 1.39 g at 150 km/h with GT3 rear grip 1.09
     expect(r.peak).toBeLessThan(6); // measured 1.2-1.8 deg
   });
 
@@ -94,5 +94,35 @@ describe('S005-AC-07: GT3 0.5 s hard brake while cornering, then released', () =
       expect(r.g, `${g} g corner reached`).toBeGreaterThan(1.38);
       expect(r.peak, `${r.g.toFixed(2)} g`).toBeLessThan(10);
     }
+  });
+});
+
+// S005-T8 (blind test M3, Main Dev option 3A): the tester's corner brake. Key into the corner until an axle uses 0.8 of
+// its grip, hold the wheel 0.5 s, brake 0.5 s (pedal reaches 0.55, no front lock), then let go of everything or keep the
+// wheel held. With rear grip 1.05 the GT3 then kept rotating with straight wheels (let go 29-47 deg, held 7-24 deg at
+// 100-200 km/h): past their peak both axles lose force as they slide more and the car was almost neutral there.
+// Rear grip 1.09 gives it a margin: let go 5.7/6.1/7.8/8.4/8.1 deg, held 5.7/6.1/7.5/8.0/7.7 deg at 100/120/150/180/200 km/h.
+describe('S005-T8 M3: GT3 corner brake from the blind test', () => {
+  type St = ReturnType<typeof createState<ReturnType<typeof createCar>>>;
+  const both = { left: 1, right: 1 }, DEG = 180 / Math.PI;
+  const tk = (s: St, p: SimParams, k: Partial<InputFrame>): St => step(s, { ...idle, ...k }, p, carStep);
+  function cornerBrake(kmh: number, keep: boolean): number {
+    const car = gt3(), p = open(car), v = kmh * KMH;
+    const rpm = (g: number): number => ((v / car.wheelRadius) * car.gears[g]! * car.finalDrive * 60) / (2 * Math.PI);
+    let g = 0;
+    while (g < car.gears.length - 1 && rpm(g) > car.autoUpRpm) g++;
+    const s0 = createState(1, createCar(p));
+    let s: St = { ...s0, car: { ...s0.car, vx: v, v, gear: g, rpm: Math.max(car.idleRpm, rpm(g)), rateR: v / car.wheelRadius, rateF: v / car.wheelRadius } };
+    const hold = (x: St): St => ({ ...x, car: { ...x.car, t: x.car.v < v ? Math.min(1, (v - x.car.v) * 2 + 0.2) : 0 } });
+    for (let n = 0; Math.max(s.car.useF, s.car.useR) < 0.8 && n < 600; n++) s = tk(hold(s), p, { right: 1 });
+    for (let i = 0; i < 30; i++) s = tk(hold(s), p, both);
+    for (let i = 0; i < 30; i++) s = tk(s, p, { ...both, brake: 1 });
+    let peak = 0;
+    for (let i = 0; i < 6 * 60; i++) { s = tk(s, p, keep ? both : {}); peak = Math.max(peak, Math.abs(s.car.beta)); }
+    return peak * DEG;
+  }
+  it.each([100, 120, 150, 180, 200])('at %i km/h: let go under 10 deg, wheel held under 15 deg', (kmh) => {
+    expect(cornerBrake(kmh, false), 'let go').toBeLessThan(10);
+    expect(cornerBrake(kmh, true), 'held').toBeLessThan(15);
   });
 });

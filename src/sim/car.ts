@@ -38,9 +38,14 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
     // rear axle rolls straight, so the centre of mass points inwards) and is no slide. Below DRIFT_MIN_SPEED it never
     // counts (as for drifts), which also skips the rear slip left by the switch from the low-speed branch near 11 km/h.
     const slide = s.v > DRIFT_MIN_SPEED && Math.abs(s.ar) > Math.min(c.steerSlideBeta, c.tirePeakSlip);
-    if (free && s.st !== 0 && ((slide && c.steerSlideShare > 0) || s.af * s.st < 0)) {
-      const tyre = s.af * s.st < 0 ? Math.min(centreRate(c, fy, s.af), c.steerReturnMaxShare / steerLockTime(c, s.v)) : 0;
-      const d = Math.max(tyre, slide ? c.steerSlideShare / steerLockTime(c, s.v) : 0) * h;
+    // S005-T8: the tyre pulls to centre while its side force points that way (fy has the steering's sign; in the slip
+    // branch that is the front slip opposite the steering). The key-rate limit shrinks near centre (steerReturnSoftSteer,
+    // so taps add up at speed), and above steerReturnMinSpeed a minimum return clears the slow tail (steerReturnMin).
+    const pull = fy * s.st > 0, minOn = s.v > c.steerReturnMinSpeed && c.steerReturnMin > 0;
+    if (free && s.st !== 0 && ((slide && c.steerSlideShare > 0) || pull || minOn)) {
+      const soft = c.steerReturnSoftSteer > 0 ? Math.min(1, Math.abs(s.st) / c.steerReturnSoftSteer) : 1;
+      const tyre = pull ? Math.min(centreRate(c, fy, s.af), (c.steerReturnMaxShare * soft) / steerLockTime(c, s.v)) : 0;
+      const d = Math.max(tyre, minOn ? c.steerReturnMin : 0, slide ? c.steerSlideShare / steerLockTime(c, s.v) : 0) * h;
       s.st = s.st > 0 ? Math.max(0, s.st - d) : Math.min(0, s.st + d);
     }
   }
