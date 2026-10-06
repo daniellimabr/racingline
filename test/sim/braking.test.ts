@@ -7,6 +7,8 @@
 //   S15 200-0: 0.92 g, peak 1.01 g, 178.8 m  ->  0.86 g, peak 0.95 g, 188.9 m (tyre load sensitivity 0.5:
 //              the front gains less grip from the forward weight shift). Grip 0.99 caps it near 0.95 g.
 //   GT3 200-0: 1.49 g, peak 1.86 g, 109.4 m  ->  unchanged (target 1.4-1.7 g).
+// S004-T11 (GT3 tyre load sensitivity 0.3, which keeps it straight when braking at speed): GT3 200-0 109.4 m -> 113.7 m
+//   (lot script: 1.48 -> 1.40 g, peak 1.88 -> 1.83 g); the loaded front has a little less grip, so it locks sooner.
 import { describe, expect, it } from 'vitest';
 import { createCarRegistry } from '../../src/core/car-registry.ts';
 import { createState } from '../../src/core/sim.ts';
@@ -60,6 +62,6 @@ describe('braking from 200 km/h on Interlagos asphalt (S004-AC-04)', () => {
     const t = onTrack(gt3);
     expect(t.meanG).toBeGreaterThan(1.4);
     expect(t.meanG).toBeLessThan(1.7);
-    expect(t.dist).toBeCloseTo(109.4, 0);
+    expect(t.dist).toBeCloseTo(113.7, 0); // S004-T11: was 109.4 m before GT3 load sensitivity 0.3
   });
 });

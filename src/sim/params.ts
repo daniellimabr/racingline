@@ -20,7 +20,7 @@ export const CAR_SCHEMA = {
   staticFrontWeight: num(0.1, 0.9), // static front axle load share · 0.55 in phys() · tuned
   frontWeightMin: num(0, 1), // clamp on the dynamic front share · 0.3 · tuned
   frontWeightMax: num(0, 1), // · 0.8 · tuned
-  loadSensitivity: num(0, 1), // tyre grip coefficient falls by this share per 100% extra axle load, mu(W) = mu (1 - ls (W/W0 - 1)) · model (S004-T3)
+  loadSensitivity: num(0, 1), // tyre grip coefficient falls by this share per 100% extra axle load, mu(W) = mu (1 - ls (W/W0 - 1)) · model; S15 0.5 (S004-T3), GT3 0.3 (S004-T11: keeps the braking GT3 stable at speed; race slicks are load sensitive, the rest stands in for side-to-side weight transfer) · tuned
   wheelRadius: num(0.1, 1), // m · RW · spec
   grip: num(0.1, 3), // tire friction coefficient · v24 muOf() at its default skill 0.4 (S15 0.95 + 0.1*0.4) · tuned
   tireB: num(1, 50), // tire curve stiffness, F = sin(C*atan(B*slip)) · tire() 14 · model
@@ -48,7 +48,7 @@ export const CAR_SCHEMA = {
   brakeRear: num(0, 1), // rear brake share · 0.3 · tuned
   brakeLockMargin: num(0, 1), // share of grip a brake can use before lock · 0.98 · tuned
   rearBrakeMaxShare: num(0, 1), // most of the rear grip the rear brake may take, like a brake balance valve · 0.75 · tuned (S003-T3, Daniel option 1B)
-  rearCornerGrip: num(0.5, 2), // rear cornering grip factor over the front, a stability margin; traction and braking unchanged · 1.05 · tuned (S003-T3, Daniel option 2B)
+  rearCornerGrip: num(0.5, 2), // rear cornering grip factor over the front, a stability margin; traction and braking unchanged · 1.05 · tuned (S003-T3, Daniel option 2B); S15 1.15 (S004-T11: settles at the limit with the wheels straight; stands in for front-biased roll stiffness)
   lockUsage: num(0, 5), // front use shown while locked · 1.15 · tuned
   dragCoef: num(0, 0.01), // 1/m, aero drag per v^2 · 0.00036 · tuned
   rollingDecel: num(0, 5), // m/s2 when moving · 0.15 · tuned
@@ -56,7 +56,7 @@ export const CAR_SCHEMA = {
   engineBrakeRpm: num(1, 20000), // rpm where engine braking is full · 6000 · tuned
   engineBrakeGearDiv: num(0.1, 100), // gear ratio divisor (v24 writes GRS[gear]/2) · 2 · tuned
   engineBrakeThrottle: num(0, 1), // throttle below which engine braking applies · 0.05 · tuned
-  spinLatOnset: num(0, 5), // wheelspin ratio where rear side grip starts to fade · 0.4 · tuned
+  spinLatOnset: num(0, 5), // wheelspin ratio where rear side grip starts to fade · 0.4 · tuned; S15 0.2 (S004-T11: keeps the power-on drift with the larger rear margin)
   spinLatGain: num(0, 20), // how fast rear side grip fades with wheelspin · 1.8 · tuned
   spinWheelGain: num(0, 100), // m/s of rear wheel overspeed per unit of wheelspin · 14 · tuned
   peakTorque: num(1, 2000), // N m · torqueAt() 330 · spec-ish
