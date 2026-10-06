@@ -1,32 +1,22 @@
 // Distance boards and apex kerbs (S004-T6): placed from the track's `brakePoints` and `apexKerbs`, in the
-// shape agreed with Database (docs/sprints/SPRINT-004/mailbox/database-to-front-end-track-fields.md).
-// Both fields are optional: a track without them (older files) gets no boards and no apex kerbs.
+// shape agreed with Database (docs/sprints/SPRINT-004/mailbox/database-to-front-end-track-fields.md; types
+// in data/track.ts). A track without them (older files, the lot) gets no boards and no apex kerbs.
 // Track geometry only (where the road bends), never physics. All results in metres.
-import { centerlineAt, type Track, type Vec } from '../data/track.ts';
+import { centerlineAt, type ApexKerb, type Track, type Vec } from '../data/track.ts';
 
-export interface BrakePoint {
-  /** Distance along the lap, m. */
-  readonly s: number;
-  readonly name: string;
-}
 /** Side of the road in the driving direction. */
-export type Side = 'left' | 'right';
-export interface ApexKerb {
-  /** Stretch along the lap, m; `to` below `from` means the stretch crosses the start line. */
-  readonly from: number;
-  readonly to: number;
-  readonly side: Side;
-  /** Kerb width outside the track edge, m. */
-  readonly width: number;
-}
-export interface TrackMarks {
-  readonly apexKerbs?: readonly ApexKerb[];
-  readonly brakePoints?: readonly BrakePoint[];
-}
-export type MarkedTrack = Pick<Track, 'points' | 'verge'> & TrackMarks;
+export type Side = ApexKerb['side'];
+/** Both fields may be missing on a raw object (the checked track fills them with []); missing draws nothing. */
+export type MarkedTrack = Pick<Track, 'points' | 'verge' | 'length'> & Partial<Pick<Track, 'apexKerbs' | 'brakePoints'>>;
 
 /** Boards stand this far before each braking point, m, in driving order. */
 export const BOARD_DISTANCES = [200, 150, 100, 50] as const;
+/**
+ * A braking point gets boards only when it is at least this far after the previous one, m, wrapping round
+ * the lap (Main Dev, S004-T6 review): closer ones would stand inside the previous corner (Laranjinha after
+ * Ferradura on Interlagos).
+ */
+export const MIN_BRAKE_GAP = 300;
 /** Board centre beyond the outer edge of the verge, m. */
 const BOARD_GAP = 4;
 /** How far after a braking point the corner is looked for, m, and the bend that counts as the corner, rad. */
@@ -53,16 +43,6 @@ export interface KerbPath {
   readonly pts: readonly Vec[];
 }
 
-function lapLength(track: Pick<Track, 'points'>): number {
-  const pts = track.points;
-  let lap = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const p = pts[i]!, q = pts[(i + 1) % pts.length]!;
-    lap += Math.hypot(q[0] - p[0], q[1] - p[1]);
-  }
-  return lap;
-}
-
 const wrapAngle = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
 
 /** The outside of the first corner after `s`: a right-hand bend (heading growing, y down) has its outside on the left. */
@@ -87,28 +67,29 @@ function besideAt(track: Pick<Track, 'points'>, s: number, side: Side, off: (wid
 export function boardsFor(track: MarkedTrack): Board[] {
   const points = track.brakePoints ?? [];
   if (points.length === 0) return [];
-  const lap = lapLength(track), verge = track.verge.reduce((sum, b) => sum + b.width, 0);
+  const lap = track.length, verge = track.verge.reduce((sum, b) => sum + b.width, 0);
   const out: Board[] = [];
-  for (const bp of points) {
+  points.forEach((bp, i) => {
+    const before = i > 0 ? points[i - 1]!.s : points[points.length - 1]!.s - lap;
+    if (points.length > 1 && bp.s - before < MIN_BRAKE_GAP) return;
     const side = outsideOf(track, bp.s);
     for (const d of BOARD_DISTANCES) {
       const s = (((bp.s - d) % lap) + lap) % lap;
       const [x, y] = besideAt(track, s, side, (w) => w / 2 + verge + BOARD_GAP);
       out.push({ s, label: String(d), corner: bp.name, side, x, y });
     }
-  }
+  });
   return out;
 }
 
 export function kerbsFor(track: MarkedTrack): KerbPath[] {
   const kerbs = track.apexKerbs ?? [];
   if (kerbs.length === 0) return [];
-  const lap = lapLength(track);
+  // The track checker keeps every stretch inside one lap, from below to.
   return kerbs.map((k) => {
-    const end = k.to >= k.from ? k.to : k.to + lap, pts: Vec[] = [];
-    const off = (w: number): number => w / 2 + k.width / 2;
-    for (let s = k.from; s < end; s += KERB_STEP) pts.push(besideAt(track, s, k.side, off));
-    pts.push(besideAt(track, end, k.side, off));
+    const pts: Vec[] = [], off = (w: number): number => w / 2 + k.width / 2;
+    for (let s = k.from; s < k.to; s += KERB_STEP) pts.push(besideAt(track, s, k.side, off));
+    pts.push(besideAt(track, k.to, k.side, off));
     return { side: k.side, width: k.width, s: k.from, pts };
   });
 }

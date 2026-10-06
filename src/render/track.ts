@@ -3,7 +3,7 @@
 // pieces inside the camera's view. Reads the track, never writes it.
 import type { Track, TrackLine } from '../data/track.ts';
 import type { Rect } from './camera.ts';
-import { boardsFor, kerbsFor, type Board, type TrackMarks } from './boards.ts';
+import { boardsFor, kerbsFor, type Board } from './boards.ts';
 
 /** One centerline piece in world px: from point i to point i+1, with its width and distance from the start. */
 export interface Segment {
@@ -48,7 +48,7 @@ export const surfaceColor = (name: string): string => (Object.hasOwn(SURFACE_COL
 
 export const MINI = { x: 500, y: 10, w: 130, h: 100 } as const;
 
-export function buildTrackArt(track: Track & TrackMarks, px: number): TrackArt {
+export function buildTrackArt(track: Track, px: number): TrackArt {
   const pts = track.points, n = pts.length;
   const vergeTotal = track.verge.reduce((sum, b) => sum + b.width, 0);
   const segments: Segment[] = [];

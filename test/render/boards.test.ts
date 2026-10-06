@@ -1,24 +1,29 @@
 // S004-AC-10 (boards and kerbs half): distance boards sit 200, 150, 100 and 50 m before each braking point on
 // the outside of the corner, the wider apex kerbs follow the given track edge, and a track without the new
-// fields draws exactly as before. Fixture data in the shape agreed with Database
-// (docs/sprints/SPRINT-004/mailbox/database-to-front-end-track-fields.md), so this does not wait for the file.
+// fields draws exactly as before. Fixture tracks use the shape agreed with Database
+// (docs/sprints/SPRINT-004/mailbox/database-to-front-end-track-fields.md); the last block checks the real file.
 import { describe, expect, it } from 'vitest';
-import { centerlineAt, nearestOnCenterline, type Track, type TrackPoint } from '../../src/data/track.ts';
+import { centerlineAt, nearestOnCenterline, type ApexKerb, type BrakePoint, type Track, type TrackPoint } from '../../src/data/track.ts';
 import { TRACKS } from '../../src/tracks/index.ts';
-import { BOARD_DISTANCES, boardsFor, kerbsFor, type ApexKerb, type BrakePoint } from '../../src/render/boards.ts';
+import { BOARD_DISTANCES, boardsFor, kerbsFor, MIN_BRAKE_GAP } from '../../src/render/boards.ts';
 import { buildTrackArt, drawTrack } from '../../src/render/track.ts';
 import { recordingContext } from './canvas-stub.ts';
 
 const PX = 9;
 const interlagos = TRACKS.find((t) => t.id === 'interlagos')!;
-type Marked = Track & { apexKerbs?: readonly ApexKerb[]; brakePoints?: readonly BrakePoint[] };
+/** A raw track object with both new fields left out, as in an older file before the checker fills them. */
+function withoutFields(t: Track): Track {
+  const { apexKerbs: _k, brakePoints: _b, ...rest } = t;
+  return rest as Track;
+}
+const bareInterlagos = withoutFields(interlagos);
 
 /**
  * A 1000 x 600 m rectangle, 26 m wide, points every 10 m, starting at (900, 0) heading east. Clockwise on
  * screen (y down), so every corner turns right; `mirror` flips y so every corner turns left. Lap 3200 m;
  * the first corner is at s = 100.
  */
-function rectangle(mirror: boolean, marks: { apexKerbs?: ApexKerb[]; brakePoints?: BrakePoint[] }): Marked {
+function rectangle(mirror: boolean, marks: { apexKerbs?: ApexKerb[]; brakePoints?: BrakePoint[] }): Track {
   const corners: [number, number][] = [[1000, 0], [1000, 600], [0, 600], [0, 0], [900, 0]];
   const pts: TrackPoint[] = [];
   let [x, y] = [900, 0];
@@ -29,7 +34,7 @@ function rectangle(mirror: boolean, marks: { apexKerbs?: ApexKerb[]; brakePoints
       y += Math.sign(cy - y) * 10;
     }
   }
-  return { ...interlagos, length: 3200, points: pts, ...marks };
+  return { ...interlagos, length: 3200, points: pts, apexKerbs: [], brakePoints: [], ...marks };
 }
 
 const vergeTotal = interlagos.verge.reduce((sum, b) => sum + b.width, 0);
@@ -80,13 +85,25 @@ describe('distance boards', () => {
   });
 
   it('are none when the track has no braking points (the lot and older track files)', () => {
-    expect(boardsFor(interlagos)).toEqual([]);
+    expect(boardsFor(bareInterlagos)).toEqual([]);
     expect(boardsFor(rectangle(false, {}))).toEqual([]);
+  });
+
+  it(`skip a braking point less than ${MIN_BRAKE_GAP} m after the previous one, wrapping round the lap`, () => {
+    expect(MIN_BRAKE_GAP).toBe(300);
+    // 1100 is 200 m after 900: no boards. 1400 is 300 m after 1100: boards (the gap counts from any braking point).
+    const t = rectangle(false, { brakePoints: [{ s: 900, name: 'A' }, { s: 1100, name: 'B' }, { s: 1400, name: 'C' }] });
+    expect([...new Set(boardsFor(t).map((b) => b.corner))]).toEqual(['A', 'C']);
+    // 80 is 250 m after 3030 of the previous lap: no boards; 3030 itself keeps its boards.
+    const w = rectangle(false, { brakePoints: [{ s: 80, name: 'first' }, { s: 1500, name: 'mid' }, { s: 3030, name: 'last' }] });
+    expect([...new Set(boardsFor(w).map((b) => b.corner))]).toEqual(['mid', 'last']);
+    // A lone braking point always gets its boards.
+    expect(boardsFor(rectangle(false, { brakePoints: [{ s: 80, name: 'only' }] }))).toHaveLength(4);
   });
 
   it('stand off the road on Interlagos for braking points spread round the lap', () => {
     const brakePoints = Array.from({ length: 12 }, (_, i) => ({ s: 150 + i * 340, name: 'C' + i }));
-    const boards = boardsFor({ ...interlagos, brakePoints });
+    const boards = boardsFor({ ...interlagos, apexKerbs: [], brakePoints });
     expect(boards).toHaveLength(48);
     for (const b of boards) {
       const near = nearestOnCenterline(interlagos, b.x, b.y);
@@ -111,16 +128,8 @@ describe('apex kerbs', () => {
     expect(k!.pts[k!.pts.length - 1]![1]).toBeCloseTo(60, 6);
   });
 
-  it('may cross the start line', () => {
-    const t = rectangle(false, { apexKerbs: [{ from: 3180, to: 20, side: 'left', width: 2 }] });
-    const [k] = kerbsFor(t);
-    const first = k!.pts[0]!, last = k!.pts[k!.pts.length - 1]!;
-    expect(last[0] - first[0]).toBeCloseTo(40, 6); // 40 m east along the top straight
-    for (const [, y] of k!.pts) expect(y).toBeCloseTo(-14, 6); // left of eastbound is north
-  });
-
   it('are none when the track has no apex kerbs', () => {
-    expect(kerbsFor(interlagos)).toEqual([]);
+    expect(kerbsFor(bareInterlagos)).toEqual([]);
   });
 });
 
@@ -139,7 +148,7 @@ describe('drawing boards and kerbs', () => {
   });
 
   it('draws the apex kerb as a red and white stripe', () => {
-    const t = rectangle(false, { apexKerbs: [{ from: 3150, to: 50, side: 'left', width: 3 }] });
+    const t = rectangle(false, { apexKerbs: [{ from: 3100, to: 3190, side: 'left', width: 3 }] });
     const rec = recordingContext();
     drawTrack(rec.ctx, buildTrackArt(t, PX), view);
     const dashes = rec.calls.filter(([k]) => k === 'setLineDash').map(([, a]) => a[0] as number[]);
@@ -148,8 +157,8 @@ describe('drawing boards and kerbs', () => {
 
   it('draws exactly as before when the track has neither field', () => {
     const plain = recordingContext(), withEmpty = recordingContext();
-    drawTrack(plain.ctx, buildTrackArt(rectangle(false, {}), PX), view);
-    drawTrack(withEmpty.ctx, buildTrackArt(rectangle(false, { apexKerbs: [], brakePoints: [] }), PX), view);
+    drawTrack(plain.ctx, buildTrackArt(withoutFields(rectangle(false, {})), PX), view);
+    drawTrack(withEmpty.ctx, buildTrackArt(rectangle(false, {}), PX), view);
     expect(withEmpty.calls).toEqual(plain.calls);
     expect(plain.texts().map(([s]) => s)).not.toContain('200');
   });
@@ -160,5 +169,29 @@ describe('drawing boards and kerbs', () => {
     drawTrack(plain.ctx, buildTrackArt(rectangle(false, {}), PX), view);
     drawTrack(marked.ctx, buildTrackArt(t, PX), view);
     expect(marked.calls).toEqual(plain.calls);
+  });
+});
+
+describe('the real Interlagos file', () => {
+  it('has boards for five corners and all 13 apex kerbs; Laranjinha is too close after Ferradura', () => {
+    expect(interlagos.brakePoints).toHaveLength(6);
+    const boards = boardsFor(interlagos), corners = [...new Set(boards.map((b) => b.corner))];
+    expect(boards).toHaveLength(20);
+    expect(corners).toHaveLength(5);
+    expect(corners).not.toContain('Laranjinha');
+    expect(kerbsFor(interlagos)).toHaveLength(13);
+    const art = buildTrackArt(interlagos, PX);
+    expect([art.boards.length, art.kerbs.length]).toEqual([20, 13]);
+  });
+
+  it('keeps the S do Senna 200 m board at the end of the previous lap, off the road', () => {
+    const senna = interlagos.brakePoints[0]!;
+    const b200 = boardsFor(interlagos).find((b) => b.corner === senna.name && b.label === '200')!;
+    expect(b200.s).toBeCloseTo(senna.s - 200 + interlagos.length, 6);
+    expect(b200.s).toBeGreaterThan(4200);
+    for (const b of boardsFor(interlagos)) {
+      const near = nearestOnCenterline(interlagos, b.x, b.y);
+      expect(near.distance, `${b.corner} ${b.label}`).toBeGreaterThan(near.width / 2 + vergeTotal);
+    }
   });
 });
