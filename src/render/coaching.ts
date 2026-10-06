@@ -21,9 +21,17 @@ export const DRIFT_GROW_MAX = 0.6;
  * calmer line takes over only once the shown one has been gone this long (S005-T9, S005-T11, S005-T13).
  */
 export const MSG_HOLD = 0.4;
-/** A calmer line enters only once it has been chosen this long without a break, s (S005-T13). */
+/**
+ * A calmer line enters only once it has been chosen this long without a break, s, also over a still calmer line, so
+ * a line that escalates to a red warning within this time is never shown (S005-T13, S005-T15 M3).
+ */
 export const CALM_ENTER = 0.2;
-/** Rank of the red warnings ("passando do ponto", "saturando"): they replace any calmer line at once (S005-T13). */
+/** A different red warning replaces the shown one once it has been chosen this long without a break, s (S005-T15 m6). */
+export const RED_SWAP = 0.1;
+/**
+ * Rank of the red warnings ("passando do ponto", "saturando", "Saindo de traseira"): they replace any calmer line at
+ * once (S005-T13, S005-T15 m7).
+ */
 const RANK_RED = 3;
 /** Rank of "Rodou!": it replaces any other line at once. */
 const RANK_SPIN = 4;
@@ -56,7 +64,7 @@ export interface Coach {
   readonly tone: Tone;
   /** Halo strength for the 'halo' tone, 0..1. */
   readonly p: number;
-  /** Urgency: after MSG_HOLD a higher rank replaces the shown line, an equal or lower one waits until it is gone MSG_HOLD. */
+  /** Urgency: red (3) and above replace calmer lines at once; see holdLine for the rest. */
   readonly rank: number;
   /** The car is in a drift worth coaching this frame (speed, throttle, rear slip), held or not. */
   readonly drift?: boolean;
@@ -81,7 +89,7 @@ export function coachLine(s: CarState, o: { paused: boolean; onTrack: boolean; l
   if (danger) return c(ts.rear ? 'Traseira passando do ponto — alivie já' : 'Dianteira saturando — menos direção', 'halo', 3);
   if (on && ts.warn) return c(ts.rear ? 'Traseira chegando ao limite — alivie' : 'Dianteira chegando ao limite — menos direção/freio', 'halo', 2);
   if (s.cut) return c('Corte de giro — suba marcha (.) ou alivie', 'red', 2);
-  if (mode === 'rear') return c(MODE_MSG.rear!, 'red', 2);
+  if (mode === 'rear') return c(MODE_MSG.rear!, 'red', RANK_RED);
   if (mode === 'drift') return c(MODE_MSG.drift!, 'drift', 2);
   if (mode === 'front') return c(MODE_MSG.front!, 'yellow', 2);
   if (s.lockF) return c('Dianteira travada — alivie o freio', 'yellow', 2);
@@ -111,11 +119,12 @@ export const createCoachHold = (): CoachHold => ({ shown: null, age: 0, gone: 0,
 const EPS = 1e-9;
 
 /**
- * The line to show after `dt` seconds of frame time (S005-T9, S005-T11, S005-T13). A red warning, "Rodou!" and the
- * pause replace any calmer line at once, and the pause line also leaves at once. Otherwise the shown line stays at
- * least MSG_HOLD; then a more urgent line replaces it, and an equal or calmer one only once it has been chosen
- * CALM_ENTER without a break and the shown line has not been chosen for MSG_HOLD, so a calmer line never shows for a
- * moment between two urgent ones. In a drift worth coaching, any line below the red warnings counts as "Drift!"
+ * The line to show after `dt` seconds of frame time (S005-T9, S005-T11, S005-T13, S005-T15). A red warning, "Rodou!"
+ * and the pause replace any calmer line at once, and the pause line also leaves at once; a different red warning
+ * replaces a shown red one once chosen RED_SWAP without a break. Otherwise the shown line stays at least MSG_HOLD, and
+ * then a line takes over only once it has been chosen CALM_ENTER without a break and is more urgent or the shown line
+ * has not been chosen for MSG_HOLD, so a calmer line never shows for a moment between two urgent ones or just before a
+ * red one. In a drift worth coaching, any line below the red warnings counts as "Drift!"
  * until it has been chosen without a break for MSG_HOLD. The same text keeps its age. Deterministic from the
  * sequence of lines and frame times.
  */
@@ -139,10 +148,11 @@ export function holdLine(h: CoachHold, next: Coach, dt: number): Coach {
     h.gone = 0;
   } else {
     if (cur !== null) h.gone += d;
-    const calmIn = h.wantedFor >= CALM_ENTER - EPS && h.gone >= MSG_HOLD - EPS;
-    const settled = cur !== null && h.age >= MSG_HOLD - EPS && (want.rank > cur.rank || calmIn);
+    const steady = h.wantedFor >= CALM_ENTER - EPS;
+    const settled = cur !== null && h.age >= MSG_HOLD - EPS && steady && (want.rank > cur.rank || h.gone >= MSG_HOLD - EPS);
     const urgent = cur !== null && want.rank >= RANK_RED && want.rank > cur.rank;
-    if (cur === null || urgent || want.rank >= RANK_SPIN || cur.rank >= RANK_PAUSE || settled) {
+    const redSwap = cur !== null && want.rank === RANK_RED && cur.rank === RANK_RED && h.wantedFor >= RED_SWAP - EPS;
+    if (cur === null || urgent || redSwap || want.rank >= RANK_SPIN || cur.rank >= RANK_PAUSE || settled) {
       h.shown = want;
       h.age = 0;
       h.gone = 0;
