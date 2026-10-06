@@ -13,10 +13,12 @@ export const shape = (c: CarParams, st: number): number => c.steerLinear * st + 
 export const dLim = (c: CarParams, v: number): number => Math.max(c.steerMin, c.maxSteer / (1 + v / c.steerSpeedRef));
 /**
  * Seconds for the steering to travel from centre to full lock at speed v (m/s), from car data
- * (S004-T2): low + (top - low) * (v / topSpeed) ^ curve. Very quick when slow, slow at high speed.
+ * (S004-T2): low + (top - low) * (|v| / topSpeed) ^ curve. Very quick when slow, slow at high speed.
+ * The speed size is used (reverse steers like forward) and is capped at the top speed, so the base stays in
+ * 0..1 and the time stays between the low and top values for any curve the car file allows (never NaN).
  */
 export const steerLockTime = (c: CarParams, v: number): number =>
-  c.steerLockTime + (c.steerLockTimeTop - c.steerLockTime) * (v / c.steerLockTopSpeed) ** c.steerLockCurve;
+  c.steerLockTime + (c.steerLockTimeTop - c.steerLockTime) * Math.min(1, Math.abs(v) / c.steerLockTopSpeed) ** c.steerLockCurve;
 /** Normalized tire force for a slip angle (v24 tire). */
 export const tire = (c: CarParams, a: number): number => Math.sin(c.tireC * Math.atan(c.tireB * a));
 /** Engine torque, N m (v24 torqueAt). */

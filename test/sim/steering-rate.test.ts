@@ -46,6 +46,27 @@ describe('steering rate depends on speed (S004-AC-03)', () => {
     expect(steerLockTime(base, 0)).toBe(base.steerLockTime);
   });
 
+  it('reverse uses the speed size, and above the top speed the time stays at the top value', () => {
+    for (const c of [s15(), gt3()]) {
+      for (const v of [1, 10, 40, 83]) expect(steerLockTime(c, -v)).toBe(steerLockTime(c, v));
+      expect(steerLockTime(c, 2 * c.steerLockTopSpeed)).toBe(c.steerLockTimeTop);
+      expect(steerLockTime(c, -2 * c.steerLockTopSpeed)).toBe(c.steerLockTimeTop);
+    }
+  });
+
+  it('every curve the car file may hold gives a finite time between the low and top values', () => {
+    for (const curve of [0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4.5, 6]) {
+      const c = loadCarParams({ ...s15Json, steerLockCurve: curve }, 'test.json');
+      for (const v of [-200, -83.333, -30, -0.5, 0, 0.5, 30, 83.333, 200]) {
+        const t = steerLockTime(c, v);
+        expect(Number.isFinite(t), `curve ${curve}, v ${v}`).toBe(true);
+        expect(t).toBeGreaterThanOrEqual(c.steerLockTime);
+        expect(t).toBeLessThanOrEqual(c.steerLockTimeTop);
+        expect(t).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it('rejects a curve that gets quicker with speed', () => {
     expect(() => loadCarParams({ ...s15Json, steerLockTime: 3, steerLockTimeTop: 1 }, 'test.json')).toThrow(DataError);
     expect(() => loadCarParams({ ...s15Json, steerLockTime: 3, steerLockTimeTop: 1 }, 'test.json')).toThrow(/steerLockTimeTop/);
