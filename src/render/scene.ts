@@ -1,13 +1,13 @@
 // Main canvas (v24 draw(), wheel(), drawDiagram(), drawTach(), lines 206-282). Reads the car and the
 // sim's view helpers (predict, tractionState); never writes sim state. UI text is Portuguese, as in v24.
-import { HALO_THRESHOLD, predict, tractionState, type CarState, type SimParams } from '../sim/index.ts';
+import { predict, tractionState, type CarState, type SimParams } from '../sim/index.ts';
 import { carHud, gearText } from '../ui/hud-car.ts';
 import { carLook } from './car-look.ts';
 import { drawMiniDot, grassTiles, lotMiniDot, LOT_MINI, WORLD_W, type LotArt } from './lot.ts';
 export { carLook, type CarLook } from './car-look.ts';
 import { DIAG, DIAG_FY, DIAG_RY, type View } from './view.ts';
 import { followCamera, SCREEN_H, SCREEN_W, targetZoom, toScreen, toWorldRect, viewRect, type Rect } from './camera.ts';
-import { coachMode } from './coaching.ts';
+import { coachLine, haloLevel, holdLine, type Coach } from './coaching.ts';
 import { drawTrack, drawTrackMinimap, surfaceColor, type TrackArt } from './track.ts';
 import { lapHud, type LapHud, type LapProgress, type SectorState } from '../ui/hud-lap.ts';
 export { SCREEN_H, SCREEN_W } from './camera.ts';
@@ -256,10 +256,7 @@ function strokePath(c: CanvasRenderingContext2D, a: [number, number], b: [number
   c.stroke();
 }
 
-const MODE_MSG: Record<string, string> = {
-  spin: 'Rodou!', drift: 'Drift! Acelerador + contraesterço', rear: 'Saindo de traseira — contraesterce',
-  front: 'Saindo de frente — menos direção',
-};
+const TONE_COLOR: Record<Exclude<Coach['tone'], 'halo'>, string> = { red: '#ff8a7e', drift: '#7ec8ff', yellow: '#ffd770', plain: '#d6dbe3' };
 
 const SECTOR_COLOR: Record<SectorState, string> = { done: '#f4f1ea', running: '#7ec8ff', todo: '#8a93a3' };
 
@@ -321,8 +318,8 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   // Projected racing line (sim geometry in meters, drawn in world px) and the axle label at its tip, worked out
   // first so the boards under any HUD panel, the label included, can be left out (S005-T5).
   const pr = predict(s, p), pts = pr.pts.map(([x, y]): [number, number] => [x * PX, y * PX]);
-  const col = pedalColor(s.t, s.b), ts = tractionState(s), on = ts.risk > HALO_THRESHOLD && s.v > 2;
-  const e = pts[pts.length - 1]!, danger = on && ts.p > 0.75 && ts.rising;
+  const col = pedalColor(s.t, s.b), ts = tractionState(s), { on, danger } = haloLevel(s, ts);
+  const e = pts[pts.length - 1]!;
   let tag: { text: string; x: number; y: number; box: Rect } | null = null;
   if (on) {
     // Axle label at the line tip: words, never a percentage above 100.
@@ -478,26 +475,10 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   c.fillRect(184 - (s.beta < 0 ? bb * 84 : 0), 375, bb * 84, 8);
   c.fillStyle = '#d6dbe3';
   c.fillRect(183, 372, 2, 14);
-  const warnMsg = on
-    ? danger ? (ts.rear ? 'Traseira passando do ponto — alivie já' : 'Dianteira saturando — menos direção')
-      : ts.warn ? (ts.rear ? 'Traseira chegando ao limite — alivie' : 'Dianteira chegando ao limite — menos direção/freio')
-      : null
-    : null;
-  const mode = coachMode(s);
-  const msg = f.paused ? 'Pausado — analise a telemetria'
-    : warnMsg ?? (s.cut ? 'Corte de giro — suba marcha (.) ou alivie' : null) ?? MODE_MSG[mode]
-      ?? (s.lockF ? 'Dianteira travada — alivie o freio'
-        : s.wspin ? 'Patinando — passou do limite de tração'
-        : s.off ? (art ? 'Fora da pista' : 'Fora do pátio')
-        : pr.slip ? 'Linha acima da aderência — freie'
-        : 'Vírgula reduz · Ponto sobe · M automático');
-  c.fillStyle = warnMsg ? 'rgb(' + haloRgb(Math.max(0.2, ts.p)).join(',') + ')'
-    : s.cut ? '#ff8a7e'
-    : mode === 'spin' || mode === 'rear' ? '#ff8a7e'
-    : mode === 'drift' ? '#7ec8ff'
-    : mode || s.wspin || s.lockF ? '#ffd770'
-    : '#d6dbe3';
-  c.fillText(msg, 24, 400);
+  // Coaching line: this frame's choice, held in the view so a line stays up long enough to read (S005-T9).
+  const line = holdLine(view.coach, coachLine(s, { paused: f.paused, onTrack: art !== null, lineSlip: pr.slip }), f.dt);
+  c.fillStyle = line.tone === 'halo' ? 'rgb(' + haloRgb(line.p).join(',') + ')' : TONE_COLOR[line.tone];
+  c.fillText(line.text, 24, 400);
   // Minimap of the track or the lot.
   c.fillStyle = 'rgba(29,36,48,0.8)';
   fillBox(c, PANELS.mini);
