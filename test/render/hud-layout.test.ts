@@ -77,5 +77,5 @@ describe('HUD panels and distance boards', () => {
     }
     expect(drawn).toBeGreaterThan(100); // the boards really are drawn round the lap
     expect(hidden).toEqual([]);
-  });
+  }, 20_000); // about 1300 full frames: 3 s in a full run, 7 s once under load (S005-T11)
 });

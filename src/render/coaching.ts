@@ -1,6 +1,6 @@
 // Which coaching line the HUD shows (S005-T5, S005-T9). The sim calls any body slip above 0.25 rad a drift,
 // which at walking pace or with the throttle shut is not a drift to coach. Display thresholds only; the sim's
-// state is read, never changed. The hold on the shown line lives in the render-side view (S005-T9).
+// state is read, never changed. The hold on the shown line lives in the render-side view (S005-T9, S005-T11).
 import { HALO_THRESHOLD, tractionState, type CarState, type TractionState } from '../sim/index.ts';
 
 type Mode = CarState['mode'];
@@ -16,8 +16,16 @@ export const DRIFT_MSG_REAR_SLIP = 0.13;
  * rate `dB`); then "Drift!" outranks the traction warnings. Faster growth is a slide getting away (S005-T9).
  */
 export const DRIFT_GROW_MAX = 0.6;
-/** A shown coaching line stays at least this long, s, unless a more urgent one replaces it (S005-T9). */
+/**
+ * A shown coaching line stays at least this long, s, unless "Rodou!" or the pause replaces it; a calmer line
+ * takes over only once the shown one has been gone this long (S005-T9, S005-T11).
+ */
 export const MSG_HOLD = 0.4;
+/** Rank of "Rodou!": this rank and above replace the shown line at once. */
+const RANK_SPIN = 4;
+/** Rank of the pause line: it also leaves at once. */
+const RANK_PAUSE = 5;
+const DRIFT_TEXT = 'Drift! Acelerador + contraesterço';
 
 /** The mode to coach: a drift without speed, throttle or rear slip is coached as a rear slide at speed, else not at all. */
 export function coachMode(s: Pick<CarState, 'mode' | 'v' | 't' | 'ar'>): Mode {
@@ -44,12 +52,14 @@ export interface Coach {
   readonly tone: Tone;
   /** Halo strength for the 'halo' tone, 0..1. */
   readonly p: number;
-  /** Urgency: a higher rank replaces a shown line at once, an equal or lower one waits for MSG_HOLD. */
+  /** Urgency: after MSG_HOLD a higher rank replaces the shown line, an equal or lower one waits until it is gone MSG_HOLD. */
   readonly rank: number;
+  /** The car is in a drift worth coaching this frame (speed, throttle, rear slip), held or not. */
+  readonly drift?: boolean;
 }
 
 const MODE_MSG: Partial<Record<Mode, string>> = {
-  spin: 'Rodou!', drift: 'Drift! Acelerador + contraesterço', rear: 'Saindo de traseira — contraesterce',
+  spin: 'Rodou!', drift: DRIFT_TEXT, rear: 'Saindo de traseira — contraesterce',
   front: 'Saindo de frente — menos direção',
 };
 
@@ -59,9 +69,10 @@ const MODE_MSG: Partial<Record<Mode, string>> = {
  */
 export function coachLine(s: CarState, o: { paused: boolean; onTrack: boolean; lineSlip: boolean }): Coach {
   const ts = tractionState(s), { on, danger } = haloLevel(s, ts), mode = coachMode(s);
-  const c = (text: string, tone: Tone, rank: number): Coach => ({ text, tone, p: Math.max(0.2, ts.p), rank });
-  if (o.paused) return c('Pausado — analise a telemetria', 'plain', 5);
-  if (mode === 'spin') return c(MODE_MSG.spin!, 'red', 4);
+  const drift = mode === 'drift';
+  const c = (text: string, tone: Tone, rank: number): Coach => ({ text, tone, p: Math.max(0.2, ts.p), rank, drift });
+  if (o.paused) return c('Pausado — analise a telemetria', 'plain', RANK_PAUSE);
+  if (mode === 'spin') return c(MODE_MSG.spin!, 'red', RANK_SPIN);
   if (controlledDrift(s)) return c(MODE_MSG.drift!, 'drift', 2);
   if (danger) return c(ts.rear ? 'Traseira passando do ponto — alivie já' : 'Dianteira saturando — menos direção', 'halo', 3);
   if (on && ts.warn) return c(ts.rear ? 'Traseira chegando ao limite — alivie' : 'Dianteira chegando ao limite — menos direção/freio', 'halo', 2);
@@ -81,21 +92,47 @@ export interface CoachHold {
   shown: Coach | null;
   /** Seconds the shown line has been up. */
   age: number;
+  /** Seconds since this frame's choice was last the shown line. */
+  gone: number;
+  /** This frame's choice before the hold, and how long it has been chosen without a break, s. */
+  asked: string;
+  askedFor: number;
 }
 
-export const createCoachHold = (): CoachHold => ({ shown: null, age: 0 });
+export const createCoachHold = (): CoachHold => ({ shown: null, age: 0, gone: 0, asked: '', askedFor: 0 });
+
+const EPS = 1e-9;
 
 /**
- * The line to show after `dt` seconds of frame time: the new line replaces the shown one when it is more urgent
- * or the shown one has been up MSG_HOLD; the same text keeps its age, so it never restarts. Deterministic from
- * the sequence of lines and frame times.
+ * The line to show after `dt` seconds of frame time (S005-T9, S005-T11). "Rodou!" and the pause replace the shown
+ * line at once, and the pause line also leaves at once. Otherwise the shown line stays at least MSG_HOLD; then a
+ * more urgent line replaces it, and an equal or calmer one only once the shown line has not been chosen for
+ * MSG_HOLD, so a calmer line never shows for a moment between two urgent ones. In a drift worth coaching, any other
+ * line below "Rodou!" counts as "Drift!" until it has been chosen without a break for MSG_HOLD. The same text keeps
+ * its age. Deterministic from the sequence of lines and frame times.
  */
 export function holdLine(h: CoachHold, next: Coach, dt: number): Coach {
+  const d = Math.max(0, dt);
+  if (next.text === h.asked) h.askedFor += d;
+  else {
+    h.asked = next.text;
+    h.askedFor = d;
+  }
+  const want: Coach = next.drift && next.rank < RANK_SPIN && next.text !== DRIFT_TEXT && h.askedFor < MSG_HOLD - EPS
+    ? { text: DRIFT_TEXT, tone: 'drift', p: next.p, rank: 2, drift: true } : next;
   const cur = h.shown;
-  if (cur === null || next.text !== cur.text && (next.rank > cur.rank || h.age >= MSG_HOLD - 1e-9)) {
-    h.shown = next;
-    h.age = 0;
-  } else if (next.text === cur.text) h.shown = next; // same line, fresh colour
-  h.age += Math.max(0, dt);
+  if (cur !== null && want.text === cur.text) {
+    h.shown = want; // same line, fresh colour
+    h.gone = 0;
+  } else {
+    if (cur !== null) h.gone += d;
+    const settled = cur !== null && h.age >= MSG_HOLD - EPS && (want.rank > cur.rank || h.gone >= MSG_HOLD - EPS);
+    if (cur === null || want.rank >= RANK_SPIN || cur.rank >= RANK_PAUSE || settled) {
+      h.shown = want;
+      h.age = 0;
+      h.gone = 0;
+    }
+  }
+  h.age += d;
   return h.shown!;
 }
