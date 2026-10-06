@@ -17,6 +17,11 @@ export const DRIFT_MSG_REAR_SLIP = 0.13;
  */
 export const DRIFT_GROW_MAX = 0.6;
 /**
+ * A rear slide whose body slip shrinks faster than this, rad/s (the sim's smoothed rate `dB`), is already being caught,
+ * so "Saindo de traseira" gives way to the calmer line it would otherwise get (S005-T17).
+ */
+export const REAR_SHRINK_MAX = 0.1;
+/**
  * A shown coaching line stays at least this long, s, unless a red warning, "Rodou!" or the pause replaces it; a
  * calmer line takes over only once the shown one has been gone this long (S005-T9, S005-T11, S005-T13).
  */
@@ -77,7 +82,7 @@ const MODE_MSG: Partial<Record<Mode, string>> = {
 
 /**
  * This frame's line, before the hold. Order: paused, "Rodou!", a controlled "Drift!", past the point of control,
- * near the limit, rev cut, the sim's slide modes, front lock, wheelspin, off the road, line above grip, help.
+ * near the limit, rev cut, the sim's slide modes (a rear slide only while it grows or holds), front lock, wheelspin, off the road, line above grip, help.
  */
 export function coachLine(s: CarState, o: { paused: boolean; onTrack: boolean; lineSlip: boolean }): Coach {
   const ts = tractionState(s), { on, danger } = haloLevel(s, ts), mode = coachMode(s);
@@ -89,7 +94,7 @@ export function coachLine(s: CarState, o: { paused: boolean; onTrack: boolean; l
   if (danger) return c(ts.rear ? 'Traseira passando do ponto — alivie já' : 'Dianteira saturando — menos direção', 'halo', 3);
   if (on && ts.warn) return c(ts.rear ? 'Traseira chegando ao limite — alivie' : 'Dianteira chegando ao limite — menos direção/freio', 'halo', 2);
   if (s.cut) return c('Corte de giro — suba marcha (.) ou alivie', 'red', 2);
-  if (mode === 'rear') return c(MODE_MSG.rear!, 'red', RANK_RED);
+  if (mode === 'rear' && s.dB >= -REAR_SHRINK_MAX) return c(MODE_MSG.rear!, 'red', RANK_RED);
   if (mode === 'drift') return c(MODE_MSG.drift!, 'drift', 2);
   if (mode === 'front') return c(MODE_MSG.front!, 'yellow', 2);
   if (s.lockF) return c('Dianteira travada — alivie o freio', 'yellow', 2);
