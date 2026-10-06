@@ -10,6 +10,7 @@
   "staticFrontWeight": 0.45,
   "frontWeightMin": 0.3,
   "frontWeightMax": 0.8,
+  "loadSensitivity": 0,
   "wheelRadius": 0.35,
   "grip": 1.54,
   "tireB": 18,

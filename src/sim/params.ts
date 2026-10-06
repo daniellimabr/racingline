@@ -20,6 +20,7 @@ export const CAR_SCHEMA = {
   staticFrontWeight: num(0.1, 0.9), // static front axle load share · 0.55 in phys() · tuned
   frontWeightMin: num(0, 1), // clamp on the dynamic front share · 0.3 · tuned
   frontWeightMax: num(0, 1), // · 0.8 · tuned
+  loadSensitivity: num(0, 1), // tyre grip coefficient falls by this share per 100% extra axle load, mu(W) = mu (1 - ls (W/W0 - 1)) · model (S004-T3)
   wheelRadius: num(0.1, 1), // m · RW · spec
   grip: num(0.1, 3), // tire friction coefficient · v24 muOf() at its default skill 0.4 (S15 0.95 + 0.1*0.4) · tuned
   tireB: num(1, 50), // tire curve stiffness, F = sin(C*atan(B*slip)) · tire() 14 · model

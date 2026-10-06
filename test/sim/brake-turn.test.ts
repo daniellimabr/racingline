@@ -4,6 +4,7 @@
 // S004-T2: after the steering tap the opposite key brings the steering back to centre (it no longer centres
 // itself). With the slower steering above about 105 km/h, 0.5 s of steering at 150 km/h asks the GT3 for
 // less than before and it no longer slides at all.
+// S004-T3: with tyre load sensitivity (loadSensitivity 0.5) the S15 no longer slides here either (it spun once).
 import { describe, expect, it } from 'vitest';
 import { gt3, s15 } from './gt3-helpers.ts';
 import { brakeTurn } from './spin-scenarios.ts';
@@ -23,7 +24,7 @@ describe('braking while turning (S003-AC-02)', () => {
 
   // With 0.5 s of steering the car may still spin once; the held brake must not stretch the slide.
   it.each([
-    ['S15', 100, s15, true], ['S15', 150, s15, true], ['GT3', 150, gt3, false],
+    ['S15', 100, s15, false], ['S15', 150, s15, false], ['GT3', 150, gt3, false],
   ] as const)('%s at %i km/h with 0.5 s of steering: held-brake slide is at most 2x the released one', (_n, kmh, car, slides) => {
     const held = brakeTurn(car(), kmh, true, 0.5), released = brakeTurn(car(), kmh, false, 0.5);
     expect(released.slide > 0, 'the released-brake run slides').toBe(slides);

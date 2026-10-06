@@ -29,6 +29,10 @@
 //   Lift-off at the limit, steering centred: no slide on either car, 3-13 deg (GT3 120 km/h no longer slides).
 // S004-T2 Main Dev call: the S15 uses the cube steering curve (quicker through drift speeds), so its 0.2 s tap
 // at 100 km/h asks for more steering: 6 -> 29 deg of rotation, still no slide; lift-off 3.5 / 4.9 deg.
+// S004-T3 (S15 tyre load sensitivity 0.5; GT3 unchanged) re-measured the S15 numbers:
+//   S15 0.2 s of steering: 29 deg -> 10 deg (100 km/h), 20 -> 5 deg (150 km/h), still no slide.
+//   S15 150 km/h, 0.5 s: one spin, 251 deg, slide 5.4 / 4.8 s -> no slide, 26 deg, brake held or released.
+//   S15 lift-off at the limit, steering centred: 3.5 -> 3.8 deg (120 km/h), 4.9 -> 2.8 deg (200 km/h).
 import { describe, expect, it } from 'vitest';
 import { gt3, s15 } from './gt3-helpers.ts';
 import { brakeTurn, liftOff } from './spin-scenarios.ts';
@@ -51,7 +55,7 @@ describe('spin record before and after the S003 fix (S003-AC-01)', () => {
           const o = brakeTurn(car(), kmh, hold);
           expect(o.spun).toBe(false);
           expect(o.slide).toBe(0);
-          expect(o.yaw).toBeLessThan(30); // S15 at 100 km/h 29 deg with the cube steering curve
+          expect(o.yaw).toBeLessThan(11); // S15 at 100 km/h 10.0 deg since S004-T3
         }
       }
     });
@@ -62,12 +66,12 @@ describe('spin record before and after the S003 fix (S003-AC-01)', () => {
       near(o.yaw, 29.2); // S003: 10.5 deg with self-centring
     });
 
-    it('0.5 s of steering at 150 km/h still spins once, but the held brake no longer stretches the slide', () => {
+    it('0.5 s of steering at 150 km/h no longer slides either car (S003: one spin each)', () => {
+      // S004-T3: S15 before 4792 deg; S003 253 deg, slide 5.4 s held / 4.8 s released; T2 234 deg.
       const sh = brakeTurn(s15(), 150, true, 0.5), sr = brakeTurn(s15(), 150, false, 0.5);
-      near(sh.yaw, 234); // before 4792 deg; S003 253 deg
-      near(sh.slide, 5.35); // before 20.4 s
-      near(sr.slide, 4.65);
-      near(sh.sideDecel, 5.6, 0.15); // before 1.9 m/s2; S003 5.0
+      expect(sh.spun || sr.spun).toBe(false);
+      expect(sh.slide + sr.slide).toBe(0);
+      near(sh.yaw, 25.6);
       // S004-T2: the GT3 no longer slides here (S003: 172 deg, slide 3.67 s held / 2.7 s released).
       const gh = brakeTurn(gt3(), 150, true, 0.5), gr = brakeTurn(gt3(), 150, false, 0.5);
       expect(gh.spun || gr.spun).toBe(false);
@@ -78,16 +82,16 @@ describe('spin record before and after the S003 fix (S003-AC-01)', () => {
 
   describe('lifting off at the grip limit, steering brought back to centre (S004-T2; S003 used full lock)', () => {
     it.each([
-      ['S15', 120, s15, 3.5], ['S15', 200, s15, 4.9], ['GT3', 120, gt3, 10.2], ['GT3', 200, gt3, 12.5],
+      ['S15', 120, s15, 3.8], ['S15', 200, s15, 2.8], ['GT3', 120, gt3, 10.2], ['GT3', 200, gt3, 12.5],
     ] as const)('%s at %i km/h holds its line (rotation about %s deg)', (_n, kmh, car, yaw) => {
-      const o = liftOff(car(), kmh, true, true);
+      const o = liftOff(car(), kmh, true, 'centre');
       expect(o.spun).toBe(false);
       expect(o.slide).toBe(0);
       near(o.yaw, yaw, 0.2);
     });
 
     it('releasing the steering without lifting spins neither car (unchanged control)', () => {
-      for (const [car, kmh] of [[s15, 120], [s15, 200], [gt3, 120], [gt3, 200]] as const) expect(liftOff(car(), kmh, false, true).spun).toBe(false);
+      for (const [car, kmh] of [[s15, 120], [s15, 200], [gt3, 120], [gt3, 200]] as const) expect(liftOff(car(), kmh, false, 'centre').spun).toBe(false);
     });
   });
 });

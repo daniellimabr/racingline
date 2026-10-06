@@ -14,24 +14,26 @@
     "S003-T3 steady-corner: rear cornering grip +5% (rearCornerGrip 1.05, Daniel option 2B) changes the cornering balance; the other three scenarios keep their hashes.",
     "S004-T2 drift-countersteer (state, line): steering now stays where it is put with a speed-dependent rate (no self-centring), so the recorded taps leave full lock on; the car ends stopped after two drifts instead of rolling at 35 km/h after one (both runs reach spin mode).",
     "S004-T2 steady-corner (state, line): the recorded on/off taps relied on self-centring to hold about a quarter lock; with held steering they add up to full lock, so the car ends in a tight 10 km/h circle instead of a 43 km/h corner. The other four scenarios never steer and keep their hashes.",
-    "S004-T2 Main Dev call, S15 steering curve 2 -> 3 (quicker through drift speeds): drift-countersteer and steady-corner (state, line) change again; the S15 reaches full lock sooner in both recordings. The other four scenarios never steer."
+    "S004-T2 Main Dev call, S15 steering curve 2 -> 3 (quicker through drift speeds): drift-countersteer and steady-corner (state, line) change again; the S15 reaches full lock sooner in both recordings. The other four scenarios never steer.",
+    "S004-T3 braking (state, line): S15 tyre load sensitivity 0.5 (grip per unit of load falls as an axle gains load), so the front gains less grip from the forward weight shift and straight stops are about 4-6% longer (100-0 km/h 51.5 -> 53.8 m).",
+    "S004-T3 drift-countersteer and steady-corner (state, line): the same S15 load sensitivity changes the cornering balance under weight transfer, so both steering recordings run differently; manual-shift, straight-accel and wobble keep their hashes (traction is unchanged)."
   ],
   "scenarios": {
     "braking": {
-      "state": "737a5053e81b4d15",
-      "line": "e0673af6647a9ce9"
+      "state": "2e0e5d9bd5e1a4f3",
+      "line": "528c5e430fd58be5"
     },
     "drift-countersteer": {
-      "state": "5dbbf448aa6862cb",
-      "line": "64cd46f908b09d0a"
+      "state": "67442471f5f4da8e",
+      "line": "61a1e91eac538748"
     },
     "manual-shift": {
       "state": "4e550d96a236874f",
       "line": "0aa58c7a8adadb05"
     },
     "steady-corner": {
-      "state": "f56ae275821662c2",
-      "line": "f07d780ffff2058f"
+      "state": "f24e4a1bbe24db85",
+      "line": "398c96dcc781ada7"
     },
     "straight-accel": {
       "state": "8c4f93751f83dc07",
