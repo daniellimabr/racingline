@@ -20,6 +20,7 @@ export const CAR_SCHEMA = {
   staticFrontWeight: num(0.1, 0.9), // static front axle load share · 0.55 in phys() · tuned
   frontWeightMin: num(0, 1), // clamp on the dynamic front share · 0.3 · tuned
   frontWeightMax: num(0, 1), // · 0.8 · tuned
+  loadSensitivity: num(0, 1), // tyre grip coefficient falls by this share per 100% extra axle load, mu(W) = mu (1 - ls (W/W0 - 1)) · model; S15 0.5 (S004-T3), GT3 0.3 (S004-T11: keeps the braking GT3 stable at speed; race slicks are load sensitive, the rest stands in for side-to-side weight transfer) · tuned
   wheelRadius: num(0.1, 1), // m · RW · spec
   grip: num(0.1, 3), // tire friction coefficient · v24 muOf() at its default skill 0.4 (S15 0.95 + 0.1*0.4) · tuned
   tireB: num(1, 50), // tire curve stiffness, F = sin(C*atan(B*slip)) · tire() 14 · model
@@ -32,10 +33,12 @@ export const CAR_SCHEMA = {
   steerQuad: num(0, 1), // quadratic part · shape() 0.65 · tuned
   counterBetaOnset: num(0, 1.5), // rad, slip angle where countersteer lock starts · steer() 0.05 · tuned
   counterBetaFull: num(0.01, 1.5), // rad, slip angle with full countersteer lock · steer() 0.25 · tuned
-  steerRate: num(0.01, 100), // 1/s, steering travel speed · sim() 1.3 · tuned
-  steerFastRate: num(0.01, 100), // 1/s, when reversing or countersteering · sim() 3 · tuned
-  steerFastBeta: num(0, 1.5), // rad, slip angle that enables the fast rate · sim() 0.1 · tuned
-  steerReturnRate: num(0.01, 100), // 1/s, self-centering · sim() 7 · tuned
+  // Steering stays where it is put (no self-centring); its travel time depends on speed (S004-T2, Daniel
+  // 2026-10-06). Replaces v24's steerRate 1.3/s, steerFastRate 3/s and steerReturnRate 7/s.
+  steerLockTime: num(0.02, 10), // s, centre to full lock at rest · 0.2 · tuned (S004-T2)
+  steerLockTimeTop: num(0.02, 60), // s, centre to full lock at steerLockTopSpeed (not below steerLockTime) · 5 · tuned (S004-T2)
+  steerLockTopSpeed: num(1, 200), // m/s, speed of steerLockTimeTop · 83.333 = 300 km/h · tuned (S004-T2)
+  steerLockCurve: num(0.5, 6), // shape of the travel time between the two: 1 straight, 2 square of speed (equal to v24's 1.3/s near 105 km/h), 3 stays quick through drift speeds · S15 3, GT3 2 · tuned (S004-T2, Main Dev)
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned
   brakeRise: num(0.01, 100), // 1/s · sim() 1.1 · tuned
@@ -45,7 +48,7 @@ export const CAR_SCHEMA = {
   brakeRear: num(0, 1), // rear brake share · 0.3 · tuned
   brakeLockMargin: num(0, 1), // share of grip a brake can use before lock · 0.98 · tuned
   rearBrakeMaxShare: num(0, 1), // most of the rear grip the rear brake may take, like a brake balance valve · 0.75 · tuned (S003-T3, Daniel option 1B)
-  rearCornerGrip: num(0.5, 2), // rear cornering grip factor over the front, a stability margin; traction and braking unchanged · 1.05 · tuned (S003-T3, Daniel option 2B)
+  rearCornerGrip: num(0.5, 2), // rear cornering grip factor over the front, a stability margin; traction and braking unchanged · 1.05 · tuned (S003-T3, Daniel option 2B); S15 1.15 (S004-T11: settles at the limit with the wheels straight; stands in for front-biased roll stiffness)
   lockUsage: num(0, 5), // front use shown while locked · 1.15 · tuned
   dragCoef: num(0, 0.01), // 1/m, aero drag per v^2 · 0.00036 · tuned
   rollingDecel: num(0, 5), // m/s2 when moving · 0.15 · tuned
@@ -53,7 +56,7 @@ export const CAR_SCHEMA = {
   engineBrakeRpm: num(1, 20000), // rpm where engine braking is full · 6000 · tuned
   engineBrakeGearDiv: num(0.1, 100), // gear ratio divisor (v24 writes GRS[gear]/2) · 2 · tuned
   engineBrakeThrottle: num(0, 1), // throttle below which engine braking applies · 0.05 · tuned
-  spinLatOnset: num(0, 5), // wheelspin ratio where rear side grip starts to fade · 0.4 · tuned
+  spinLatOnset: num(0, 5), // wheelspin ratio where rear side grip starts to fade · 0.4 · tuned; S15 0.2 (S004-T11: keeps the power-on drift with the larger rear margin)
   spinLatGain: num(0, 20), // how fast rear side grip fades with wheelspin · 1.8 · tuned
   spinWheelGain: num(0, 100), // m/s of rear wheel overspeed per unit of wheelspin · 14 · tuned
   peakTorque: num(1, 2000), // N m · torqueAt() 330 · spec-ish
@@ -100,6 +103,8 @@ export function loadCarParams(json: unknown, file: string): CarParams {
   const issues: { path: string; reason: string }[] = [];
   if (Math.abs(d.frontAxleFraction + d.rearAxleFraction - 1) > 1e-9)
     issues.push({ path: '$.rearAxleFraction', reason: 'frontAxleFraction + rearAxleFraction must equal 1' });
+  if (d.steerLockTimeTop < d.steerLockTime)
+    issues.push({ path: '$.steerLockTimeTop', reason: 'must not be below steerLockTime (steering never quickens with speed)' });
   if (d.frontWeightMin > d.frontWeightMax) issues.push({ path: '$.frontWeightMin', reason: 'must not exceed frontWeightMax' });
   if (!(d.idleRpm < d.cutResumeRpm)) issues.push({ path: '$.idleRpm', reason: 'idleRpm must be below cutResumeRpm' });
   if (!(d.cutResumeRpm < d.cutRpm)) issues.push({ path: '$.cutResumeRpm', reason: 'cutResumeRpm must be below cutRpm' });

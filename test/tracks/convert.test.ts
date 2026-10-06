@@ -34,6 +34,12 @@ describe('track conversion (S003-AC-06)', () => {
     expect(() => convertTrack('interlagos', { elements: [] })).toThrow(/circuit relation 6781071/);
   });
 
+  it('refuses an extract whose straight to straighten is missing, with a clear error (S004-AC-07)', () => {
+    const osm = JSON.parse(readFileSync(EXTRACT, 'utf8')) as { elements: { tags?: Record<string, string> }[] };
+    for (const e of osm.elements) if (e.tags?.name === 'Reta Oposta') delete e.tags.name;
+    expect(() => convertTrack('interlagos', osm)).toThrow(/no lap way is named "Reta Oposta"/);
+  });
+
   it('refuses an unknown track id', () => {
     expect(() => convertTrack('monza', { elements: [] })).toThrow(/unknown track "monza"/);
   });

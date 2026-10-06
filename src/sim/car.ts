@@ -7,7 +7,8 @@ import type { Track } from '../data/track.ts';
 import { trackDrift, DRIFT_BETA } from './drift.ts';
 import { engine, manualShift } from './engine.ts';
 import { allWheelsOff, createLapState, lapStep } from './laps.ts';
-import { phys } from './physics.ts';
+import { phys, steerLockTime } from './physics.ts';
+import { nextLeave, resetCar } from './reset.ts';
 import type { SimParams } from './params.ts';
 import type { CarState } from './state.ts';
 import { lotSurface, trackSurface, type AxleSurface } from './surface.ts';
@@ -21,12 +22,9 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   // v24 keys are on/off: any pedal or steering value above zero counts as held.
   s.t = k.throttle > 0 ? Math.min(1, s.t + c.throttleRise * dt) : Math.max(0, s.t - c.throttleFall * dt);
   s.b = k.brake > 0 ? Math.min(1, s.b + c.brakeRise * dt) : Math.max(0, s.b - c.brakeFall * dt);
+  // S004-T2: the steering stays where it is put (no self-centring); a key moves it at a speed-dependent rate.
   const sd = (k.right > 0 ? 1 : 0) - (k.left > 0 ? 1 : 0);
-  if (sd) {
-    const fast = Math.sign(s.st) === -sd || (Math.abs(s.beta) > c.steerFastBeta && sd === Math.sign(s.beta));
-    s.st += sd * (fast ? c.steerFastRate : c.steerRate) * dt;
-    s.st = Math.max(-1, Math.min(1, s.st));
-  } else s.st -= Math.sign(s.st) * Math.min(Math.abs(s.st), c.steerReturnRate * dt);
+  if (sd) s.st = Math.max(-1, Math.min(1, s.st + (sd * dt) / steerLockTime(c, s.v)));
   for (let i = 0; i < substeps; i++) phys(s, dt / substeps, p, surf);
   engine(c, s, dt, surf.dragR);
   const ab = Math.abs(s.beta);
@@ -67,6 +65,8 @@ function noLookup(tr: Track): never {
 
 /** Pure: works on a copy of the car and returns it; car, input and params are never mutated. */
 export const carStep: CarStep<CarState, SimParams> = (car, input, p, ctx) => {
+  // R press (S004-T5): the tick only puts the car back at rest; nothing else runs on it.
+  if (input.reset) return resetCar(car, p, ctx.dt);
   const s: CarState = { ...car }; // nested drift data is replaced, never edited (drift.ts)
   const c = p.car, dt = ctx.dt;
   // v24 key handlers run before the frame's step(); order up, down, automatic (recording order).
@@ -82,6 +82,9 @@ export const carStep: CarStep<CarState, SimParams> = (car, input, p, ctx) => {
   const L = p.lot, px = s.x * L.scale, py = s.y * L.scale;
   s.off = tr ? allWheelsOff(tr, s, c) : px < L.x0 || px > L.x1 || py < L.y0 || py > L.y1;
   trackDrift(s, dt);
-  if (p.track) s.lap = lapStep(car.lap ?? createLapState(p.track), car, s, p.track, c);
+  if (p.track) {
+    s.lap = lapStep(car.lap ?? createLapState(p.track), car, s, p.track, c);
+    s.leave = nextLeave(p.track, car.leave, s);
+  }
   return s;
 };

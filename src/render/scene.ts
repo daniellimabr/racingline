@@ -3,7 +3,7 @@
 import { HALO_THRESHOLD, predict, tractionState, type CarState, type SimParams } from '../sim/index.ts';
 import { carHud, gearText } from '../ui/hud-car.ts';
 import { carLook } from './car-look.ts';
-import { WORLD_W, type LotArt } from './lot.ts';
+import { drawMiniDot, grassTiles, lotMiniDot, LOT_MINI, WORLD_W, type LotArt } from './lot.ts';
 export { carLook, type CarLook } from './car-look.ts';
 import { DIAG, DIAG_FY, DIAG_RY, type View } from './view.ts';
 import { followCamera, SCREEN_H, SCREEN_W, targetZoom, toScreen, viewRect } from './camera.ts';
@@ -294,9 +294,15 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   view.zoom += (targetZoom(s.v) - view.zoom) * Math.min(1, 2 * f.dt);
   const cam = followCamera(s, PX, view.zoom), { cx, cy, z } = cam;
   c.setTransform(z, 0, 0, z, SCREEN_W / 2 - cx * z, SCREEN_H / 2 - cy * z);
-  // On a track, only the pieces inside the view are drawn; the lot is one prebuilt image.
-  if (art) drawTrack(c, art, viewRect(cam, 0));
-  else c.drawImage(f.lot.image, 0, 0);
+  // On a track, only the pieces inside the view are drawn, over the lot's grass tiles when the outside is grass
+  // (S004-T10); the lot is one prebuilt image, with grass tiles round it when the car has rolled past it (S004-T6).
+  if (art) {
+    if (art.track.outside === 'grass') for (const [tx, ty] of grassTiles(viewRect(cam, 0), false)) c.drawImage(f.lot.grass, tx, ty);
+    drawTrack(c, art, viewRect(cam, 0));
+  } else {
+    c.drawImage(f.lot.image, 0, 0);
+    for (const [tx, ty] of grassTiles(viewRect(cam, 0))) c.drawImage(f.lot.grass, tx, ty);
+  }
   c.fillStyle = 'rgba(15,15,15,0.4)';
   for (const q of view.skids) c.fillRect(q[0] - 1.2, q[1] - 1.2, 2.4, 2.4);
   c.lineWidth = 2;
@@ -464,18 +470,15 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   c.fillRect(498, 8, 134, 104);
   if (art) drawTrackMinimap(c, art, s.x, s.y, look.color);
   else {
-    const L = f.lot.lot, m = 130 / WORLD_W;
+    const L = f.lot.lot, m = LOT_MINI.w / WORLD_W, dot = lotMiniDot(s.x * PX, s.y * PX);
     c.save();
-    c.translate(500, 10);
+    c.translate(LOT_MINI.x, LOT_MINI.y);
     c.fillStyle = '#4b4f55';
     c.fillRect(L.x0 * m, L.y0 * m, (L.x1 - L.x0) * m, (L.y1 - L.y0) * m);
     c.fillStyle = '#ff7a1a';
     for (const q of f.lot.cones) c.fillRect(q[0] * m - 1, q[1] * m - 1, 2, 2);
-    c.fillStyle = look.color;
-    c.beginPath();
-    c.arc(s.x * PX * m, s.y * PX * m, 3.5, 0, 7);
-    c.fill();
     c.restore();
+    drawMiniDot(c, dot, look.color);
   }
   // Active car name under the minimap (also shown as page text next to the controls).
   c.fillStyle = 'rgba(29,36,48,0.8)';

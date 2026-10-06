@@ -27,7 +27,9 @@ function launch(car: string, surface: string, secs: number) {
     kmh.push(s.car.v / KMH);
     gears.push(s.car.gear);
   }
-  return { kmh, gears, hash: hashState(s) };
+  // The R reset's leave point (S004-T5) is left out, so the hash still covers exactly the state recorded before it.
+  const { leave: _leave, ...car0 } = s.car;
+  return { kmh, gears, hash: hashState({ ...s, car: car0 }) };
 }
 const at = (kmh: number[], secs: number) => kmh[secs * 60 - 1]!;
 
@@ -61,9 +63,11 @@ describe('automatic gearbox on grass (S003-T10, Daniel option B)', () => {
 });
 
 // Tick:gear of every shift in 30 s, and the final state hash, from the gearbox at sprint head 3b3adf9.
+// S004-T4 re-recorded the four hashes: the 26 m start line (was 13 m) moves the recorded crossing time by
+// about 1e-7 s (lap.marks); position, speed, gears and every shift are unchanged.
 const BEFORE: Record<string, { hash: string; shifts: string[] }> = {
-  's15-drift/kerb': { hash: '4ecff205d962177b', shifts: ['388:2', '555:3', '939:4', '1514:5'] },
-  's15-drift/asphalt': { hash: 'f09ed02b91a171e8', shifts: ['284:2', '436:3', '809:4', '1372:5'] },
-  'gt3/kerb': { hash: '6df46b5ce94efc68', shifts: ['223:2', '325:3', '446:4', '636:5', '982:6'] },
-  'gt3/asphalt': { hash: 'ff50e4f4e108e1d6', shifts: ['210:2', '309:3', '429:4', '619:5', '964:6'] },
+  's15-drift/kerb': { hash: 'b6deb7bab5ad54c4', shifts: ['388:2', '555:3', '939:4', '1514:5'] },
+  's15-drift/asphalt': { hash: '9ba3cd594b64307a', shifts: ['284:2', '436:3', '809:4', '1372:5'] },
+  'gt3/kerb': { hash: '414b1087373789af', shifts: ['223:2', '325:3', '446:4', '636:5', '982:6'] },
+  'gt3/asphalt': { hash: 'c952739334cbc645', shifts: ['210:2', '309:3', '429:4', '619:5', '964:6'] },
 };

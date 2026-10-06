@@ -11,6 +11,14 @@ export const G = 9.81; // m/s2 (v24 g)
 export const shape = (c: CarParams, st: number): number => c.steerLinear * st + c.steerQuad * st * Math.abs(st);
 /** Speed-limited lock, rad (v24 dLim). */
 export const dLim = (c: CarParams, v: number): number => Math.max(c.steerMin, c.maxSteer / (1 + v / c.steerSpeedRef));
+/**
+ * Seconds for the steering to travel from centre to full lock at speed v (m/s), from car data
+ * (S004-T2): low + (top - low) * (|v| / topSpeed) ^ curve. Very quick when slow, slow at high speed.
+ * The speed size is used (reverse steers like forward) and is capped at the top speed, so the base stays in
+ * 0..1 and the time stays between the low and top values for any curve the car file allows (never NaN).
+ */
+export const steerLockTime = (c: CarParams, v: number): number =>
+  c.steerLockTime + (c.steerLockTimeTop - c.steerLockTime) * Math.min(1, Math.abs(v) / c.steerLockTopSpeed) ** c.steerLockCurve;
 /** Normalized tire force for a slip angle (v24 tire). */
 export const tire = (c: CarParams, a: number): number => Math.sin(c.tireC * Math.atan(c.tireB * a));
 /** Engine torque, N m (v24 torqueAt). */
@@ -56,7 +64,13 @@ export function phys(s: CarState, dt: number, p: SimParams, surf: AxleSurface): 
   const Wf = Math.max(c.frontWeightMin, Math.min(c.frontWeightMax, c.staticFrontWeight - (c.cgHeightRatio * s.axp) / G));
   // Aero terms are added, never folded in: with zero aero `x + 0` is exact, so the S15 stays bit-identical.
   const ae = aero(c, spd);
-  const Wr = 1 - Wf, Gf = muF * G * Wf + muF * ae.front, Gr = muR * G * Wr + muR * ae.rear;
+  // S004-T3 tyre load sensitivity: grip per unit of load falls as an axle gains load, mu(W) = mu * (1 - ls * (W / W0 - 1)),
+  // so weight transfer swings the cornering balance less. It applies to each axle's friction circle (front grip, rear
+  // cornering and rear brake); the rear drive force keeps the plain load (Gr), so traction is unchanged, as the S003
+  // rear margin did. At the static share the term is exactly 0, and loadSensitivity 0 is bit-identical.
+  const Wr = 1 - Wf, W0f = c.staticFrontWeight, W0r = 1 - W0f, ls = c.loadSensitivity;
+  const WfG = Wf - (ls * Wf * (Wf - W0f)) / W0f, WrG = Wr - (ls * Wr * (Wr - W0r)) / W0r;
+  const Gf = muF * G * WfG + muF * ae.front, Gr = muR * G * Wr + muR * ae.rear, GrC = muR * G * WrG + muR * ae.rear;
   const u = A / Gr;
   s.u = u;
   s.lim = Math.min(1, Gr / Math.max(0.01, Afull));
@@ -68,9 +82,9 @@ export function phys(s: CarState, dt: number, p: SimParams, surf: AxleSurface): 
   s.lockF = mv && c.brakeFront * D > Gf * c.brakeLockMargin;
   const fL = mv ? Math.min(c.brakeFront * D, Gf * c.brakeLockMargin) : 0;
   // S003: the rear brake is capped below the rear grip so cornering grip is left when weight moves forward.
-  const rB = mv ? Math.min(c.brakeRear * D, Gr * c.rearBrakeMaxShare) : 0;
+  const rB = mv ? Math.min(c.brakeRear * D, GrC * c.rearBrakeMaxShare) : 0;
   const Fxr = Fdrive - dir * rB, Fxf = -dir * fL;
-  const FfMax = Math.sqrt(Math.max(0, Gf * Gf - fL * fL)), GrL = Gr * latF * c.rearCornerGrip, FrMax = Math.sqrt(Math.max(0, GrL * GrL - rB * rB));
+  const FfMax = Math.sqrt(Math.max(0, Gf * Gf - fL * fL)), GrL = GrC * latF * c.rearCornerGrip, FrMax = Math.sqrt(Math.max(0, GrL * GrL - rB * rB));
   const delta = steer(c, s, spd);
   s.delta = delta;
   const ebrake =

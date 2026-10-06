@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { edgeDistance, onRoad, surfaceAt } from '../../src/tracks/surface-at.ts';
 import { TRACKS } from '../../src/tracks/index.ts';
+import { centerlineAt, type Track } from '../../src/data/track.ts';
 import { BOX } from '../sim/box-track.ts';
 
 const interlagos = TRACKS.find((t) => t.id === 'interlagos')!;
@@ -33,8 +34,33 @@ describe('surfaceAt', () => {
   it('works on Interlagos: the spawn is on the road and 20 m sideways is grass', () => {
     const { x, y, h } = interlagos.spawn;
     expect(surfaceAt(interlagos, x, y)).toBe(interlagos.road);
-    expect(surfaceAt(interlagos, x - Math.sin(h) * 6.9, y + Math.cos(h) * 6.9)).toBe('kerb');
+    expect(surfaceAt(interlagos, x - Math.sin(h) * 12.9, y + Math.cos(h) * 12.9)).toBe(interlagos.road); // 26 m wide
+    expect(surfaceAt(interlagos, x - Math.sin(h) * 13.9, y + Math.cos(h) * 13.9)).toBe('kerb');
     expect(surfaceAt(interlagos, x - Math.sin(h) * 20, y + Math.cos(h) * 20)).toBe(interlagos.outside);
+  });
+
+  it('treats an apex kerb stretch as kerb for its full width, only on its side and only along its stretch (S004-T4)', () => {
+    // Top of the box heads east, so the driver's right is south (y grows). Kerb: s 20..60 m, right side, 3 m wide.
+    const box: Track = { ...BOX, apexKerbs: [{ from: 20, to: 60, side: 'right', width: 3 }] };
+    expect(surfaceAt(box, 40, 5)).toBe('asphalt'); // the road is unchanged
+    expect(surfaceAt(box, 40, 6.5)).toBe('kerb');
+    expect(surfaceAt(box, 40, 8.5)).toBe('kerb'); // beyond the normal 1 m kerb, inside the 3 m apex kerb
+    expect(surfaceAt(box, 40, 9)).toBe('kerb'); // exactly at its outer edge
+    expect(surfaceAt(box, 40, 9.01)).toBe('grass');
+    expect(surfaceAt(box, 40, -8.5)).toBe('grass'); // the left side keeps its 1 m kerb
+    expect(surfaceAt(box, 15, 8.5)).toBe('grass'); // before the stretch
+    expect(surfaceAt(box, 65, 8.5)).toBe('grass'); // after the stretch
+    expect(onRoad(box, 40, 6.5)).toBe(false); // a kerb is still off the track
+    expect(surfaceAt(BOX, 40, 8.5)).toBe('grass'); // the plain box has no apex kerbs
+  });
+
+  it('finds the apex kerbs on Interlagos: 1.5 m past the inside edge at each kerb middle is kerb, the outside edge is not', () => {
+    for (const k of interlagos.apexKerbs) {
+      const c = centerlineAt(interlagos, (k.from + k.to) / 2);
+      const left = k.side === 'left' ? 1 : -1, off = c.width / 2 + 1.5; // driver's left is (dy, -dx) with y south
+      expect(surfaceAt(interlagos, c.x + c.dy * off * left, c.y - c.dx * off * left)).toBe('kerb');
+      expect(surfaceAt(interlagos, c.x - c.dy * off * left, c.y + c.dx * off * left)).toBe('grass');
+    }
   });
 
   it('every surface name it returns has grip and drag in the track file', () => {

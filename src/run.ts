@@ -5,7 +5,7 @@ import type { CarRegistry } from './core/car-registry.ts';
 import { createState, replay, type ReplayResult, type SimState } from './core/sim.ts';
 import type { InputLog } from './data/input-log.ts';
 import type { Track } from './data/track.ts';
-import { carStep, createCar, createLapState, createSimParams, TEST_LOT, type CarParams, type CarState, type SimParams } from './sim/index.ts';
+import { carStep, createCar, createLapState, createSimParams, spawnLeave, TEST_LOT, type CarParams, type CarState, type SimParams } from './sim/index.ts';
 import { TRACKS } from './tracks/index.ts';
 import { surfaceAt } from './tracks/surface-at.ts';
 
@@ -47,7 +47,7 @@ export function startRun(header: RunHeader, cars: CarRegistry<CarParams>, tracks
   // S003-T6: the physics reads the surface under each axle through Back End's lookup.
   const params: SimParams = { ...createSimParams(car, TEST_LOT, track), surfaceAt };
   const { x, y, h } = track.spawn;
-  return { params, state: createState(header.seed, { ...createCar(params), x, y, h, lap: createLapState(track) }) };
+  return { params, state: createState(header.seed, { ...createCar(params), x, y, h, lap: createLapState(track), leave: spawnLeave(track) }) };
 }
 
 /** Replays a validated input log with the car and track it names (S002-AC-10, S003-T5). */

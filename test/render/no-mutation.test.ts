@@ -1,4 +1,4 @@
-// S001-AC-12, extended by S002-AC-11 to both cars and by S003-AC-12 to Interlagos: rendering only reads sim state. The state hash
+// S001-AC-12, extended by S002-AC-11 to both cars, by S003-AC-12 to Interlagos and by S004-AC-10 to boards and kerbs: rendering only reads sim state. The state hash
 // is identical before and after every render call, and the state (and the track art) is deep-frozen while drawing, so any write would throw.
 import { expect, it } from 'vitest';
 import { hashState } from '../../src/core/hash.ts';
@@ -83,11 +83,17 @@ it.each([
   ['s15-drift', 'interlagos'],
   ['gt3', 'interlagos'],
   ['s15-drift', 'lot'],
-])('drawing the scene on a track never changes the sim state (%s on %s)', (car, trackId) => {
+  ['gt3', 'interlagos+boards'],
+])('drawing the scene on a track never changes the sim state (%s on %s)', (car, choice) => {
+  // 'interlagos+boards' adds braking points and apex kerbs in the shape agreed with Database (S004-AC-10).
+  const trackId = choice.replace('+boards', '');
   const cars = createCarRegistry([loadCarParams(s15, 's15-drift.json'), loadCarParams(gt3, 'gt3.json')]);
   const run = startRun({ seed: 3, car, track: trackId }, cars);
   const params = deepFreeze(run.params);
-  const art = params.track ? deepFreeze(buildTrackArt(params.track, params.lot.scale)) : null;
+  const marks = choice.endsWith('+boards')
+    ? { brakePoints: [{ s: 120, name: 'S do Senna' }, { s: 2400, name: 'Pinheirinho' }], apexKerbs: [{ from: 60, to: 140, side: 'left' as const, width: 3 }] }
+    : {};
+  const art = params.track ? deepFreeze(buildTrackArt({ ...params.track, ...marks }, params.lot.scale)) : null;
   expect(art !== null).toBe(trackId !== 'lot');
   const counter = { calls: 0 };
   const ctx = stubContext(counter);
