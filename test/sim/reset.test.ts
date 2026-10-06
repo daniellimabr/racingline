@@ -104,7 +104,7 @@ describe('R reset on a track (S004-AC-08)', () => {
 describe('R reset on the test lot (S004-AC-08)', () => {
   it('puts the car back at the lot spawn at rest, with no track data', () => {
     const run = startRun({ seed: 2, car: 's15-drift' }, cars);
-    const frames = Array.from({ length: 150 }, (_, i) => ({ ...IDLE, throttle: 1, left: i % 50 < 20 ? 1 : 0 }));
+    const frames = Array.from({ length: 150 }, (_, i) => ({ ...IDLE, throttle: 1, left: i < 10 ? 1 : 0 })); // one short tap: the steering now stays where it is put (S004-T2)
     const state = replay(frames, run.state, run.params, carStep).state;
     expect(Math.hypot(state.car.x - run.state.car.x, state.car.y - run.state.car.y)).toBeGreaterThan(5);
     const after = step(state, R, run.params, carStep).car;
