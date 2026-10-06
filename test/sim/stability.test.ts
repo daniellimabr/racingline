@@ -32,14 +32,16 @@ function at(car: CarParams, kmh: number): { s: S; p: SimParams } {
   return { s, p };
 }
 const tick = (s: S, p: SimParams, k: Partial<InputFrame>): S => step(s, { ...idle, ...k }, p, carStep);
+/** One tick with the ideal hand holding the wheel at `st` (S005-T2: a released wheel now returns to centre). */
+const held = (s: S, p: SimParams, k: Partial<InputFrame>, st: number): S => tick({ ...s, car: { ...s.car, st } }, p, k);
 const hold = (s: S, v: number): number => (s.car.v < v ? 1 : 0);
 
-/** Ideal hand: steering preset to `st` (no key travel), speed held for `secs`. */
+/** Ideal hand: steering held at `st` (no key travel), speed held for `secs`. */
 function steady(car: CarParams, kmh: number, st: number, secs: number): { s: S; p: SimParams } {
   const r = at(car, kmh), v = kmh * KMH;
-  let s: S = { ...r.s, car: { ...r.s.car, st } };
-  for (let i = 0; i < secs * 60; i++) s = tick(s, r.p, { throttle: hold(s, v) });
-  return { s, p: r.p };
+  let s: S = r.s;
+  for (let i = 0; i < secs * 60; i++) s = held(s, r.p, { throttle: hold(s, v) }, st);
+  return { s: { ...s, car: { ...s.car, st } }, p: r.p };
 }
 
 /** Steady corner (ideal hand) at the largest lateral g up to `g` that does not slide. */
@@ -74,12 +76,16 @@ describe('finding 2: braking for 1.5 s while cornering at up to 1.0 g (target: n
     ['GT3', 100, gt3], ['GT3', 150, gt3], ['GT3', 200, gt3], ['S15', 100, s15], ['S15', 150, s15], ['S15', 200, s15],
   ] as const)('%s at %i km/h, steering held', (_n, kmh, car) => {
     for (const g of [0.7, 1.0]) {
-      let { s, p, g: got } = corner(car(), kmh, g);
-      expect(got, 'corner reached').toBeGreaterThan(g - 0.25);
-      let peak = 0;
-      for (let i = 0; i < 90; i++) { s = tick(s, p, { brake: 1 }); peak = Math.max(peak, Math.abs(s.car.beta)); }
-      for (let i = 0; i < 120; i++) { s = tick(s, p, {}); peak = Math.max(peak, Math.abs(s.car.beta)); }
-      expect(peak * DEG, `${got.toFixed(2)} g`).toBeLessThan(25); // S004-T11 before: GT3 150 km/h 0.99 g and 200 km/h spin
+      const c0 = corner(car(), kmh, g), st = c0.s.car.st, p = c0.p;
+      expect(c0.g, 'corner reached').toBeGreaterThan(g - 0.25);
+      // Held by the hand (S004 meaning), and let go so the wheel returns by itself (S005-AC-05).
+      for (const keep of [true, false]) {
+        let s = c0.s, peak = 0;
+        const t = (k: Partial<InputFrame>): S => (keep ? held(s, p, k, st) : tick(s, p, k));
+        for (let i = 0; i < 90; i++) { s = t({ brake: 1 }); peak = Math.max(peak, Math.abs(s.car.beta)); }
+        for (let i = 0; i < 120; i++) { s = t({}); peak = Math.max(peak, Math.abs(s.car.beta)); }
+        expect(peak * DEG, `${c0.g.toFixed(2)} g, held ${keep}`).toBeLessThan(25); // S004-T11 before: GT3 150 km/h 0.99 g and 200 km/h spin
+      }
     }
   });
 });
@@ -139,11 +145,51 @@ describe('finding 5: GT3 lifting at the grip limit with the steering held (targe
       const m = (lo + hi) / 2, r = steady(gt3(), kmh, m, 3);
       if (Math.abs(r.s.car.beta) < 6 / DEG && r.s.car.v > v - 2) { lo = m; best = r; } else hi = m;
     }
-    let { s, p } = best!;
-    expect(Math.abs(s.car.v * s.car.r) / G, 'at the limit').toBeGreaterThan(1.5);
-    let peak = 0;
-    for (let i = 0; i < 300; i++) { s = tick(s, p, {}); peak = Math.max(peak, Math.abs(s.car.beta)); }
-    expect(peak * DEG).toBeLessThan(15); // S004-T11 before: 31 deg at 120 km/h, 13 deg still at 13 deg after 5 s at 200
-    expect(Math.abs(s.car.beta) * DEG, 'recovered after 5 s').toBeLessThan(5);
+    const { s: s0, p } = best!, st = s0.car.st;
+    expect(Math.abs(s0.car.v * s0.car.r) / G, 'at the limit').toBeGreaterThan(1.5);
+    for (const keep of [true, false]) { // held by the hand, and let go so the wheel returns (S005-AC-05)
+      let s = s0, peak = 0;
+      for (let i = 0; i < 300; i++) { s = keep ? held(s, p, {}, st) : tick(s, p, {}); peak = Math.max(peak, Math.abs(s.car.beta)); }
+      expect(peak * DEG, `held ${keep}`).toBeLessThan(15); // S004-T11 before: 31 deg at 120 km/h, 13 deg still at 13 deg after 5 s at 200
+      expect(Math.abs(s.car.beta) * DEG, `held ${keep}: recovered after 5 s`).toBeLessThan(5);
+    }
+  });
+});
+
+describe('S005-AC-05: the wheel returning by itself never sets up an oscillation of steering or yaw', () => {
+  // The car's own yaw overshoots zero a little when its steering is straightened (S15 at 200 km/h: 0.8 deg/s after an
+  // instant centring), so the yaw swing with the slow return is held to that of setting the steering straight at once.
+  /** Lets go and watches 6 s: steering must only move towards centre; yaw swing past zero, deg/s; `now` straightens at once. */
+  function letGo(s0: S, p: SimParams, v: number, now = false): { stOk: boolean; swing: number; yawEnd: number; betaPeak: number } {
+    const r0 = Math.sign(s0.car.r || s0.car.st);
+    let s = now ? { ...s0, car: { ...s0.car, st: 0 } } : s0, prev = Math.abs(s.car.st), stOk = true, swing = 0, betaPeak = 0;
+    for (let i = 0; i < 360; i++) {
+      s = tick(s, p, { throttle: hold(s, v) });
+      if (Math.abs(s.car.st) > prev || s.car.st * s0.car.st < 0) stOk = false;
+      prev = Math.abs(s.car.st);
+      swing = Math.max(swing, -r0 * s.car.r);
+      betaPeak = Math.max(betaPeak, Math.abs(s.car.beta));
+    }
+    return { stOk, swing: swing * DEG, yawEnd: Math.abs(s.car.r) * DEG, betaPeak: betaPeak * DEG };
+  }
+
+  it.each([['GT3', gt3], ['S15', s15]] as const)('%s straight line with a little steering left on, 50-250 km/h', (_n, car) => {
+    for (const kmh of [50, 100, 150, 200, 250]) for (const st of [0.05, -0.2]) {
+      const { s, p } = at(car(), kmh), o = letGo({ ...s, car: { ...s.car, st } }, p, kmh * KMH);
+      expect(o.stOk, `${kmh} km/h st ${st}: steering only returns`).toBe(true);
+      expect(o.swing, `${kmh} km/h st ${st}: yaw swing the other way, deg/s`).toBeLessThan(1.5); // S15 250 km/h from -0.2: 1.0
+      expect(o.yawEnd, `${kmh} km/h st ${st}: settled`).toBeLessThan(0.5);
+    }
+  });
+
+  it.each([['GT3', gt3], ['S15', s15]] as const)('%s steady corner at 0.5 and 0.9 g, then let go, 60-200 km/h', (_n, car) => {
+    for (const kmh of [60, 120, 200]) for (const g of [0.5, 0.9]) {
+      const { s, p } = corner(car(), kmh, g), o = letGo(s, p, kmh * KMH), now = letGo(s, p, kmh * KMH, true);
+      expect(o.stOk, `${kmh} km/h ${g} g: steering only returns`).toBe(true);
+      expect(o.swing, `${kmh} km/h ${g} g: yaw swing the other way, deg/s`).toBeLessThanOrEqual(Math.max(0.2, now.swing));
+      expect(o.swing).toBeLessThan(1.5);
+      expect(o.betaPeak, `${kmh} km/h ${g} g: no slide`).toBeLessThan(6);
+      expect(o.yawEnd, `${kmh} km/h ${g} g: settled after 6 s`).toBeLessThan(1);
+    }
   });
 });

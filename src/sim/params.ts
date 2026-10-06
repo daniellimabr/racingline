@@ -39,6 +39,12 @@ export const CAR_SCHEMA = {
   steerLockTimeTop: num(0.02, 60), // s, centre to full lock at steerLockTopSpeed (not below steerLockTime) · 5 · tuned (S004-T2)
   steerLockTopSpeed: num(1, 200), // m/s, speed of steerLockTimeTop · 83.333 = 300 km/h · tuned (S004-T2)
   steerLockCurve: num(0.5, 6), // shape of the travel time between the two: 1 straight, 2 square of speed (equal to v24's 1.3/s near 105 km/h), 3 stays quick through drift speeds · S15 3, GT3 2 · tuned (S004-T2, Main Dev)
+  // S005-T2 (Daniel 2026-10-06): with no steering key pressed the wheel returns to centre like a real one, pulled by
+  // the front tyres' self-aligning torque (side force x trail). Trail = caster part (stays when sliding) + tyre part
+  // (falls to zero at steerTrailFade x tirePeakSlip). Return speed = gain x front side force (g) x trail share.
+  steerCentreGain: num(0, 20), // 1/s per g, share of full steering travel per second for each g of front axle side force at full trail; 0 = no return (S004 held steering) · S15 1.5, GT3 2.5 (from full lock at 100 km/h back within 0.02 of centre in 2.4 s and 2.7 s) · tuned (S005-T2, Physics Dev proposal for Main Dev)
+  steerCasterShare: num(0, 1), // share of the aligning trail that is mechanical caster, kept when the front slides · 0.3 (road and race cars run roughly 20-30% caster trail against 70-80% tyre trail at small slip) · model, low confidence
+  steerTrailFade: num(1, 5), // front slip, in multiples of tirePeakSlip, where the tyre's own trail is gone, so the aligning torque peaks before the side force does · 2 · model, medium confidence
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned
   brakeRise: num(0.01, 100), // 1/s · sim() 1.1 · tuned
