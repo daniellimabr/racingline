@@ -41,6 +41,35 @@ export const PANELS = {
 } as const;
 /** Steering bar in the car panel, screen px: the fill grows from the middle by the sim's steering state. */
 export const STEER_BAR = { x: 24, y: 357, w: 244, h: 8 } as const;
+/** Share of each half of the steering bar that stands for the speed's lock (the 100% mark); the rest is overflow (S005-T15). */
+export const STEER_LOCK_SHARE = 0.75;
+
+/** Steering bar geometry, screen px: the fill, the overflow past the 100% mark (or null), both marks, the key mark. */
+export interface SteerBarGeo {
+  fill: { x: number; w: number };
+  over: { x: number; w: number } | null;
+  marks: [number, number];
+  key: number | null;
+}
+
+/**
+ * Where the steering bar draws a road-wheel angle `delta` (rad, signed): the share of the speed's lock `lock` fills up
+ * to the 100% mark, and any angle past it shows outside that mark as a share of the way to the car's full lock `max`,
+ * so countersteer stays readable (S005-T15 M4). `st` is the steering travel -1..1; full travel sits on the 100% mark.
+ */
+export function steerBarGeo(delta: number, lock: number, max: number, st: number): SteerBarGeo {
+  const SB = STEER_BAR, mid = SB.x + SB.w / 2, inner = (STEER_LOCK_SHARE * SB.w) / 2, outer = SB.w / 2 - inner;
+  const a = Math.abs(delta), dir = delta < 0 ? -1 : 1, fw = Math.min(1, lock > 0 ? a / lock : 1) * inner;
+  let over: SteerBarGeo['over'] = null;
+  if (a > lock) {
+    const ow = (max - lock > 1e-9 ? Math.min(1, (a - lock) / (max - lock)) : 1) * outer;
+    over = { x: dir > 0 ? mid + inner : mid - inner - ow, w: ow };
+  }
+  return {
+    fill: { x: dir > 0 ? mid : mid - fw, w: fw }, over, marks: [mid - inner, mid + inner],
+    key: st !== 0 ? mid + st * inner : null,
+  };
+}
 
 /** Map credit box in the bottom right corner (sets the credit font). */
 function creditBox(c: CanvasRenderingContext2D, credit: string): Rect {
@@ -460,18 +489,27 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
   c.fillStyle = '#fff';
   c.fillRect(24 + 118 * s.lim - 1, 334, 2, 17);
   // Steering bar: the angle the road wheels really have (the sim's delta) as a share of the speed's lock, so it is at
-  // centre whenever the sim holds the wheels straight (S005-T13 m3); the steering travel (s.st) is a faint mark.
-  const SB = STEER_BAR, mid = SB.x + SB.w / 2, share = Math.max(-1, Math.min(1, s.delta / dLim(p.car, s.v))), sw = (share * SB.w) / 2;
+  // centre whenever the sim holds the wheels straight (S005-T13 m3); the steering travel (s.st) is a faint mark. Angle
+  // past the speed's lock (countersteer) shows in orange outside the 100% marks, up to the car's full lock (S005-T15 M4).
+  const SB = STEER_BAR, g = steerBarGeo(s.delta, dLim(p.car, s.v), p.car.maxSteer, s.st), ow = SB.w / 2 * (1 - STEER_LOCK_SHARE);
   c.fillStyle = '#2c3646';
   c.fillRect(SB.x, SB.y, SB.w, SB.h);
+  c.fillStyle = '#4a3328';
+  c.fillRect(SB.x, SB.y, ow, SB.h);
+  c.fillRect(SB.x + SB.w - ow, SB.y, ow, SB.h);
   c.fillStyle = '#ffc83d';
-  c.fillRect(Math.min(mid, mid + sw), SB.y, Math.abs(sw), SB.h);
-  if (s.st !== 0) {
+  c.fillRect(g.fill.x, SB.y, g.fill.w, SB.h);
+  if (g.over) {
+    c.fillStyle = '#ff8a3d';
+    c.fillRect(g.over.x, SB.y, g.over.w, SB.h);
+  }
+  if (g.key !== null) {
     c.fillStyle = 'rgba(255,200,61,0.45)';
-    c.fillRect(mid + (s.st * SB.w) / 2 - 1, SB.y - 2, 2, SB.h + 4);
+    c.fillRect(g.key - 1, SB.y - 2, 2, SB.h + 4);
   }
   c.fillStyle = '#d6dbe3';
   c.fillRect(145, 354, 2, 14);
+  for (const x of g.marks) c.fillRect(x - 1, SB.y - 3, 2, SB.h + 6);
   c.fillStyle = '#8a93a3';
   c.fillText('Derrapagem', 24, 383);
   c.fillStyle = '#2c3646';

@@ -8,7 +8,7 @@ import { carStep, createCar, createSimParams, loadCarParams, predict, type CarSt
 import s15 from '../../src/cars/s15-drift.json';
 import gt3 from '../../src/cars/gt3.json';
 import {
-  CALM_ENTER, coachLine, coachMode, createCoachHold, DRIFT_GROW_MAX, DRIFT_MSG_KMH, DRIFT_MSG_REAR_SLIP, DRIFT_MSG_THROTTLE, holdLine, MSG_HOLD, type Coach,
+  CALM_ENTER, RED_SWAP, coachLine, coachMode, createCoachHold, DRIFT_GROW_MAX, DRIFT_MSG_KMH, DRIFT_MSG_REAR_SLIP, DRIFT_MSG_THROTTLE, holdLine, MSG_HOLD, type Coach,
 } from '../../src/render/coaching.ts';
 import { buildLot } from '../../src/render/lot.ts';
 import { drawScene } from '../../src/render/scene.ts';
@@ -103,7 +103,7 @@ const line = (text: string, rank: number, drift = false): Coach => ({ text, tone
 const help = line(HELP, 0), cut = line('Corte de giro — suba marcha (.) ou alivie', 2), wspin = line('Patinando — passou do limite de tração', 2);
 const warn = line('Traseira chegando ao limite — alivie', 2), off = line('Fora da pista', 1);
 const red = line(RED, 3), frontRed = line(FRONT_RED, 3), spin = line(SPIN, 4), paused = line('Pausado — analise a telemetria', 5);
-const URGENT = new Set([RED, FRONT_RED, SPIN, paused.text]);
+const URGENT = new Set([RED, FRONT_RED, 'Saindo de traseira — contraesterce', SPIN, paused.text]);
 /** Each `[line, seconds]` held for that long at `fps`; returns what the HUD showed as [text, seconds] runs. */
 function shownRuns(seq: readonly (readonly [Coach, number])[], fps = 60): [string, number][] {
   const h = createCoachHold(), runs: [string, number][] = [];
@@ -197,6 +197,82 @@ describe('the coaching line hold (S005-T9, S005-T11, S005-T13)', () => {
   });
 });
 
+// S005-T15 (blind round 4, M3, m6, m7): a calmer line enters only once it has been chosen CALM_ENTER without a break,
+// also over a still calmer line, so an escalation goes straight to the red warning; a different red warning replaces
+// the shown one once it has been chosen RED_SWAP; "Saindo de traseira" has the red rank.
+const DRIFT_LINE = line(DRIFT_TEXT, 2, true);
+const frontWarn = line('Dianteira chegando ao limite — menos direção/freio', 2);
+const rearSlide = line('Saindo de traseira — contraesterce', 3);
+/** Runs of calmer lines (not red, not "Rodou!", not the pause) shown under CALM_ENTER and then replaced. */
+const REDS = new Set([...URGENT, rearSlide.text]);
+const shortCalm = (runs: [string, number][]) =>
+  runs.filter(([t, s], i) => i > 0 && i < runs.length - 1 && !REDS.has(t) && !REDS.has(runs[i + 1]![0]) && s < CALM_ENTER - 1e-6);
+
+describe('calm lines and red warnings (S005-T15)', () => {
+  it(`uses a stated time: a different red warning takes over after ${RED_SWAP} s`, () => {
+    expect(RED_SWAP).toBe(0.1);
+  });
+
+  it('goes straight from help to the red warning when a near-limit line escalates (M3: 1 frame of "chegando ao limite")', () => {
+    for (const fps of [30, 60, 144]) {
+      for (const lead of [1 / fps, 0.05, 0.13, 0.18]) {
+        for (const [calm, redLine] of [[frontWarn, frontRed], [warn, red], [DRIFT_LINE, red]] as const) {
+          const runs = shownRuns([[help, 1], [calm, lead], [redLine, 1]], fps);
+          expect(runs.map(([t]) => t), `${calm.text} ${lead} s at ${fps} fps`).toEqual([HELP, redLine.text]);
+        }
+      }
+    }
+  });
+
+  it(`shows a calmer line over a still calmer one only after ${CALM_ENTER} s without a break`, () => {
+    const runs = shownRuns([[help, 1], [warn, 1]]);
+    expect(runs.map(([t]) => t)).toEqual([HELP, warn.text]);
+    expect(Math.abs(runs[0]![1] - (1 + CALM_ENTER))).toBeLessThanOrEqual(1 / 60 + 1e-6);
+  });
+
+  it('still shows a red warning at once over any calmer line', () => {
+    expect(frames(shownRuns([[help, 1], [warn, 0.3], [red, 1]]))).toEqual([[HELP, 71], [warn.text, 7], [RED, 60]]);
+  });
+
+  it(`lets a different red warning replace the shown one after ${RED_SWAP} s, not ${MSG_HOLD} s (m6)`, () => {
+    for (const fps of [60, 144]) {
+      for (const [a, b] of [[red, frontRed], [frontRed, red], [red, rearSlide]] as const) {
+        const runs = shownRuns([[help, 1], [a, 1 / fps], [b, 1]], fps);
+        expect(runs.map(([t]) => t)).toEqual([HELP, a.text, b.text]);
+        expect(runs[1]![1]).toBeLessThanOrEqual(RED_SWAP + 1 / fps + 1e-6);
+        expect(runs[1]![1]).toBeGreaterThanOrEqual(RED_SWAP - 1e-6);
+      }
+    }
+  });
+
+  it('does not flicker between two red warnings that alternate faster than that', () => {
+    const alt = Array.from({ length: 10 }, (_, i) => [i % 2 ? frontRed : red, 0.05] as const);
+    expect(shownRuns([[help, 1], [red, 0.5], ...alt, [red, 0.5]]).map(([t]) => t)).toEqual([HELP, RED]);
+  });
+
+  it('gives "Saindo de traseira — contraesterce" the red rank, so it shows at once (m7)', () => {
+    const c = coachLine(drifting(15, 0, 0.35), opts);
+    expect([c.text, c.tone, c.rank]).toEqual([rearSlide.text, 'red', 3]);
+    expect(frames(shownRuns([[help, 1 / 60], [c, 1]]))).toEqual([[HELP, 1], [rearSlide.text, 60]]);
+    expect(frames(shownRuns([[help, 1], [DRIFT_LINE, 0.1], [c, 1]]))).toEqual([[HELP, 66], [rearSlide.text, 60]]);
+  });
+
+  it('keeps "Rodou!" above every red warning', () => {
+    expect(frames(shownRuns([[rearSlide, 2 / 60], [spin, 1]]))).toEqual([[rearSlide.text, 2], [SPIN, 60]]);
+    expect(shownRuns([[spin, 0.1], [red, 0.3], [spin, 1]]).map(([t]) => t)).toEqual([SPIN]);
+  });
+
+  it('shows no calmer line under the calm time in a busy sequence like the launch, at 60 and 144 frames a second', () => {
+    // Lines are chosen in runs of 1-12 frames. A red warning may still cut a calm line short right after it entered
+    // (Main Dev's cheapest fix keeps red at once), so a short calm run is counted only when a calm line replaced it.
+    const pool = [help, cut, wspin, warn, frontWarn, red, frontRed, rearSlide, help, help];
+    let seed = 11;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const seq = Array.from({ length: 300 }, () => [pool[Math.floor(rnd() * pool.length)]!, (1 + Math.floor(rnd() * 12)) / 60] as const);
+    for (const fps of [60, 144]) expect(shortCalm(shownRuns(seq, fps))).toEqual([]);
+  });
+});
+
 describe('the coaching line in a drift (S005-T11, S005-T13)', () => {
   it('keeps "Drift!" up while calmer lines come and go in a drift worth coaching', () => {
     const drift = line(DRIFT_TEXT, 2, true), slipping = line(wspin.text, 2, true), cutting = line(cut.text, 2, true);
@@ -222,15 +298,18 @@ describe('the coaching line in a drift (S005-T11, S005-T13)', () => {
   });
 });
 
-describe('the coaching line on real Interlagos launches (S005-T11, S005-T13)', () => {
+describe('the coaching line on real Interlagos launches (S005-T11, S005-T13, S005-T15)', () => {
   const cars = createCarRegistry([loadCarParams(s15, 's15-drift.json'), loadCarParams(gt3, 'gt3.json')]);
   const track = TRACKS.find((t) => t.id === 'interlagos')!;
   const W = { throttle: 1, brake: 0, left: 0, right: 0, shiftUp: false, shiftDown: false, toggleAuto: false };
-  /** Shown runs and the longest wait, s, from a red warning (or "Rodou!") being chosen to one being shown. */
+  /**
+   * Shown runs, the longest wait, s, from a red warning (or "Rodou!") being chosen to one being shown, and the longest
+   * a different red warning was chosen without a break while another red one stayed up (S005-T15 m6).
+   */
   function drive(car: string, fps: number, ticks: number, auto: boolean) {
     const run = startRun({ seed: 1, car, track: 'interlagos' }, cars), h = createCoachHold(), runs: [string, number][] = [];
     const input = auto ? autopilot(run, track, ticks, 60, 25) : null;
-    let state = run.state, acc = 0, wait = -1, worst = 0;
+    let state = run.state, acc = 0, wait = -1, worst = 0, chosen = '', chosenFor = 0, swap = 0;
     for (let tick = 0; tick < ticks;) {
       for (acc += 1 / fps; acc >= 1 / 60 - 1e-9 && tick < ticks; acc -= 1 / 60, tick++) state = step(state, input ? input[tick]! : W, run.params, carStep);
       const s = state.car, c = coachLine(s, { paused: false, onTrack: true, lineSlip: predict(s, run.params).slip });
@@ -238,19 +317,24 @@ describe('the coaching line on real Interlagos launches (S005-T11, S005-T13)', (
       if (c.rank >= 3 && shown.rank < 3) wait = wait < 0 ? 1 / fps : wait + 1 / fps;
       else wait = -1;
       worst = Math.max(worst, wait);
+      chosenFor = c.text === chosen ? chosenFor + 1 / fps : 1 / fps;
+      chosen = c.text;
+      if (c.rank === 3 && shown.rank === 3 && shown.text !== c.text) swap = Math.max(swap, chosenFor);
       if (last && last[0] === shown.text) last[1] += 1 / fps;
       else runs.push([shown.text, 1 / fps]);
     }
-    return { runs, worst };
+    return { runs, worst, swap };
   }
   for (const car of ['s15-drift', 'gt3']) {
     for (const fps of [60, 144]) {
-      it(`${car} at ${fps} frames a second: no line flashes and no red warning waits`, () => {
+      it(`${car} at ${fps} frames a second: no line flashes, no red warning waits, a red one swaps within ${RED_SWAP} s`, () => {
         for (const [ticks, auto] of [[480, false], [1200, true]] as const) {
-          const { runs, worst } = drive(car, fps, ticks, auto);
+          const { runs, worst, swap } = drive(car, fps, ticks, auto);
           expect(runs.length).toBeGreaterThan(1);
           expect(flashes(runs)).toEqual([]);
+          expect(shortCalm(runs)).toEqual([]);
           expect(worst).toBe(0);
+          expect(swap).toBeLessThan(RED_SWAP + 1 / fps + 1e-6);
         }
       });
     }
