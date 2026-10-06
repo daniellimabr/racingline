@@ -28,11 +28,12 @@ function sim(s: CarState, dt: number, k: InputFrame, p: SimParams, substeps: num
   // S005-T2: with no steering key pressed the wheel returns towards centre, pulled by the front tyres' self-aligning
   // torque (centreRate). It only acts while that torque points to centre (front slip opposite to the steering), never
   // moves the wheel past centre, and never acts while a key is held, so it cannot fight the driver or overshoot.
+  // Main Dev: it is also capped at steerReturnMaxShare (1: never faster than the key) of the key rate at the current speed, so it is never a snap.
   const free = !(k.left > 0) && !(k.right > 0), h = dt / substeps;
   for (let i = 0; i < substeps; i++) {
     const fy = phys(s, h, p, surf);
     if (free && s.st !== 0 && s.af * s.st < 0) {
-      const d = centreRate(c, fy, s.af) * h;
+      const d = Math.min(centreRate(c, fy, s.af), c.steerReturnMaxShare / steerLockTime(c, s.v)) * h;
       s.st = s.st > 0 ? Math.max(0, s.st - d) : Math.min(0, s.st + d);
     }
   }

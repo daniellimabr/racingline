@@ -7,9 +7,10 @@
 import { describe, expect, it } from 'vitest';
 import { createState, step, type SimState } from '../../src/core/sim.ts';
 import type { InputFrame } from '../../src/core/input-frame.ts';
-import { carStep, createCar, loadCarParams, type CarParams, type CarState, type SimParams } from '../../src/sim/index.ts';
+import { carStep, createCar, loadCarParams, steerLockTime, type CarParams, type CarState, type SimParams } from '../../src/sim/index.ts';
 import { DataError } from '../../src/data/check.ts';
 import { steer } from '../../src/sim/physics.ts';
+import gt3Json from '../../src/cars/gt3.json';
 import s15Json from '../../src/cars/s15-drift.json';
 import { gt3, idle, KMH, open, s15 } from './gt3-helpers.ts';
 
@@ -97,14 +98,24 @@ describe('the return is weaker while the front tyres slide (S005-AC-03)', () => 
     return (Math.abs(st0) - Math.abs(after.car.st)) * HZ;
   }
 
-  it.each(cars)('%s: a front slipping 2.5x past its peak pulls back far less than one gripping at 0.7x', (_n, car) => {
-    const c = car();
+  // S005-AC-03 as amended by Main Dev (option B): sliding pulls less, except where the cap (never faster than the key)
+  // holds both to the same rate. With today's data that happens only on the GT3 at 200 km/h.
+  it.each(cars)('%s: a front slipping 2.5x past its peak pulls back far less than one gripping at 0.7x, unless both are capped', (_n, car) => {
+    const c = car(), capped: string[] = [];
     for (const kmh of [50, 100, 200]) for (const st0 of [0.5, -1]) {
       const grip = firstRate(c, kmh, st0, 0.7), slide = firstRate(c, kmh, st0, 2.5);
+      const cap = c.steerReturnMaxShare / steerLockTime(c, kmh * KMH);
       expect(grip, `${kmh} km/h ${st0} gripping returns`).toBeGreaterThan(0);
-      expect(slide, `${kmh} km/h ${st0} sliding vs gripping`).toBeLessThan(0.6 * grip);
       expect(slide, `${kmh} km/h ${st0} the caster still pulls`).toBeGreaterThan(0);
+      if (slide >= 0.98 * cap) { // the cap holds both: equal pull, never more when sliding
+        capped.push(`${kmh}`);
+        expect(slide, `${kmh} km/h ${st0} capped`).toBeLessThanOrEqual(grip * (1 + 1e-9));
+        expect(grip).toBeLessThanOrEqual(cap * 1.02);
+      } else {
+        expect(slide, `${kmh} km/h ${st0} sliding vs gripping`).toBeLessThan(0.6 * grip);
+      }
     }
+    expect([...new Set(capped)], 'speeds where the cap holds both').toEqual(c.id === 'gt3' ? ['200'] : []);
   });
 
   it('the S15 front slides at full lock from 50 km/h, and that full-lock release starts slower than half lock', () => {
@@ -130,5 +141,37 @@ describe('the return is weaker while the front tyres slide (S005-AC-03)', () => 
     expect(() => loadCarParams(missing, 'test.json')).toThrow(/steerCentreGain/);
     const strong = loadCarParams({ ...s15Json, steerCentreGain: 2 * s15().steerCentreGain }, 'test.json');
     expect(release(strong, 100, 0.5).t).toBeLessThan(release(s15(), 100, 0.5).t);
+  });
+});
+
+describe('the return is never quicker than the key (Main Dev option B, S005-T2)', () => {
+  it.each(cars)('%s: every tick of the return moves at most steerReturnMaxShare of the key travel at that speed', (_n, car) => {
+    const c = car();
+    expect(c.steerReturnMaxShare).toBe(1);
+    for (const kmh of [50, 100, 200]) for (const st0 of [1, 0.5, -0.5]) {
+      let { s, p } = at(c, kmh);
+      const v = kmh * KMH;
+      for (let i = 0; i < HOLD_S * HZ; i++) s = tick({ ...s, car: { ...s.car, st: st0 } }, p, { throttle: s.car.v < v ? 1 : 0 });
+      s = { ...s, car: { ...s.car, st: st0 } };
+      for (let i = 0; i < 6 * HZ; i++) {
+        const before = s.car;
+        s = tick(s, p, { throttle: before.v < v ? 1 : 0 });
+        // Tick travel against the key's travel for one tick (the speed moves a little within a tick, so a 1e-6 share of slack).
+        const key = 1 / HZ / Math.min(steerLockTime(c, before.v), steerLockTime(c, s.car.v));
+        expect(Math.abs(s.car.st - before.st), `${kmh} km/h from ${st0}, tick ${i}`).toBeLessThanOrEqual(key * (1 + 1e-6));
+      }
+    }
+  });
+
+  it('the cap does not bind at low speed, where the key is quick (even at half the key it changes nothing at 50 km/h)', () => {
+    for (const [j, car] of [[s15Json, s15], [gt3Json, gt3]] as const) {
+      const tight = loadCarParams({ ...j, steerReturnMaxShare: 0.5 }, 'test.json');
+      for (const st0 of [1, 0.5]) expect(release(tight, 50, st0).t).toBe(release(car(), 50, st0).t);
+    }
+  });
+
+  it('the cap is validated car data', () => {
+    for (const bad of [{ steerReturnMaxShare: 0 }, { steerReturnMaxShare: 1.5 }, { steerReturnMaxShare: 'half' }])
+      expect(() => loadCarParams({ ...s15Json, ...bad }, 'test.json'), JSON.stringify(bad)).toThrow(DataError);
   });
 });

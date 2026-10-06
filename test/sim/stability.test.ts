@@ -32,8 +32,8 @@ function at(car: CarParams, kmh: number): { s: S; p: SimParams } {
   return { s, p };
 }
 const tick = (s: S, p: SimParams, k: Partial<InputFrame>): S => step(s, { ...idle, ...k }, p, carStep);
-/** One tick with the ideal hand holding the wheel at `st` (S005-T2: a released wheel now returns to centre). */
-const held = (s: S, p: SimParams, k: Partial<InputFrame>, st: number): S => tick({ ...s, car: { ...s.car, st } }, p, k);
+/** One tick with the ideal hand holding the wheel at `st` (S005-T2: a released wheel returns to centre; both keys hold it exactly). */
+const held = (s: S, p: SimParams, k: Partial<InputFrame>, st: number): S => tick({ ...s, car: { ...s.car, st } }, p, { ...k, left: 1, right: 1 });
 const hold = (s: S, v: number): number => (s.car.v < v ? 1 : 0);
 
 /** Ideal hand: steering held at `st` (no key travel), speed held for `secs`. */

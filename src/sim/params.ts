@@ -45,6 +45,7 @@ export const CAR_SCHEMA = {
   steerCentreGain: num(0, 20), // 1/s per g, share of full steering travel per second for each g of front axle side force at full trail; 0 = no return (S004 held steering) · S15 1.5, GT3 2.5 (from full lock at 100 km/h back within 0.02 of centre in 2.4 s and 2.7 s) · tuned (S005-T2, Physics Dev proposal for Main Dev)
   steerCasterShare: num(0, 1), // share of the aligning trail that is mechanical caster, kept when the front slides · 0.3 (road and race cars run roughly 20-30% caster trail against 70-80% tyre trail at small slip) · model, low confidence
   steerTrailFade: num(1, 5), // front slip, in multiples of tirePeakSlip, where the tyre's own trail is gone, so the aligning torque peaks before the side force does · 2 · model, medium confidence
+  steerReturnMaxShare: num(0.01, 1), // the return never turns the wheel faster than this share of the key rate at the current speed, so it stays slow at speed; at 1 it binds only on the GT3 around 200 km/h (downforce), never at low speed · 1 · tuned (S005-T2, Main Dev option B)
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned
   brakeRise: num(0.01, 100), // 1/s · sim() 1.1 · tuned
