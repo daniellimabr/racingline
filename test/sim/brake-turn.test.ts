@@ -42,7 +42,8 @@ describe('braking while turning (S003-AC-02)', () => {
 // GT3 slides 25-48 deg from 1.35 g at 100-150 km/h (12 deg at 200 km/h, where downforce helps). Cause: the brakes
 // (0.6 front / 0.4 rear) ask the rear for more than its share once weight moves forward, so the rear passes its
 // peak while braking and, with both ends past their peak, the slide keeps growing for about 2 s after the release.
-// Below 1.2 g the held wheel stays within 3 deg. The held case is characterized until Main Dev sets the target.
+// Below 1.2 g the held wheel stays within 3 deg. Fix (Main Dev 2026-10-06): GT3 brakes 0.67 front / 0.33 rear, near the
+// front weight share under hard braking (about 0.65 at 1.4 g), so the rear keeps its cornering grip.
 describe('S005-AC-07: GT3 0.5 s hard brake while cornering, then released', () => {
   const G = 9.81, DEG = 180 / Math.PI;
   type St = ReturnType<typeof createState<ReturnType<typeof createCar>>>;
@@ -85,11 +86,13 @@ describe('S005-AC-07: GT3 0.5 s hard brake while cornering, then released', () =
     expect(brakeInCorner(kmh, 1.2, true).peak).toBeLessThan(6); // measured 2.5-3.0 deg
   });
 
-  // Near the limit the held case is sensitive to the exact corner (measured 25-48 deg at 100-150 km/h, 12-19 deg at
-  // 200 km/h for 1.41-1.55 g), so only the open state is locked: it slides past 10 deg without a full spin.
-  it.each([100, 150, 200])('at %i km/h and 1.45 g, wheel held: slides past 10 deg (open, characterized)', (kmh) => {
-    const r = brakeInCorner(kmh, 1.45, true);
-    expect(r.peak).toBeGreaterThan(10); // flip to the target once Main Dev sets it
-    expect(r.peak).toBeLessThan(75);
+  // Main Dev target (S005-AC-07): wheel held, under 10 deg at 1.45-1.55 g (1.70 g may still slide: the extreme, a skill test).
+  // Met with GT3 brakeFront 0.67 / brakeRear 0.33 (was 0.6 / 0.4: 41-48 deg at 100 km/h, 27-48 deg at 150, 12 deg at 200).
+  it.each([100, 150, 200])('at %i km/h and 1.45-1.55 g, wheel held: under 10 deg', (kmh) => {
+    for (const g of [1.45, 1.55]) {
+      const r = brakeInCorner(kmh, g, true);
+      expect(r.g, `${g} g corner reached`).toBeGreaterThan(1.38);
+      expect(r.peak, `${r.g.toFixed(2)} g`).toBeLessThan(10);
+    }
   });
 });
