@@ -69,17 +69,43 @@ describe('the released wheel returns to centre slowly (S005-AC-01)', () => {
 });
 
 describe('the return grows with speed and is nothing when parked (S005-AC-02)', () => {
-  it.each(cars)('%s: faster at 200 than 100 than 50 km/h, from full and half lock', (_n, car) => {
+  // S005-AC-02 as reworded by Main Dev (S005-T8): faster at 100 than 50 km/h; at 200 km/h no faster than the key (the
+  // cap test below) and slower near centre, so key taps build up; below 3 km/h the angle moves less than 0.05 in 2 s.
+  it.each(cars)('%s: faster at 100 than 50 km/h, from full and half lock', (_n, car) => {
     const c = car();
     for (const st0 of [1, 0.5]) {
-      const t = [50, 100, 200].map((kmh) => release(c, kmh, st0).t);
+      const t = [50, 100].map((kmh) => release(c, kmh, st0).t);
       expect(t[1]!, `${st0}: 100 vs 50 km/h`).toBeLessThan(t[0]!);
-      expect(t[2]!, `${st0}: 200 vs 100 km/h`).toBeLessThan(t[1]!);
     }
   });
 
-  it.each(cars)('%s: parked and at walking pace the wheel moves less than 0.05 in 2 s', (_n, car) => {
-    for (const kmh of [0, 5]) for (const st0 of [1, -0.5]) {
+  // Blind test M4: 100 ms taps every 250 ms, six times, at 200 km/h used to reach only 0.18 (S15) and 0.11 (GT3) and be
+  // undone between taps. With the limit shrinking below 0.3 of steering (option 4B) they reach 0.20 and 0.16.
+  it.each([['S15', s15, 0.19], ['GT3', gt3, 0.15]] as const)('%s: key taps at 200 km/h build up to at least %s, then return', (_n, car, min) => {
+    const c = car();
+    let { s, p } = at(c, 200);
+    const v = 200 * KMH, thr = (x: S): Partial<InputFrame> => ({ throttle: x.car.v < v ? 1 : 0 });
+    for (let k = 0; k < 6; k++) {
+      for (let i = 0; i < 6; i++) s = tick(s, p, { ...thr(s), right: 1 });
+      if (k < 5) for (let i = 0; i < 9; i++) s = tick(s, p, thr(s));
+    }
+    expect(s.car.st).toBeGreaterThanOrEqual(min);
+    for (let i = 0; i < 3 * HZ; i++) s = tick(s, p, thr(s));
+    expect(s.car.st, 'back at centre within 3 s').toBe(0);
+  });
+
+  // Blind test m1 (option m1A): above 20 km/h the released wheel always returns at least 0.1 of travel per second.
+  it.each([['S15', s15, 3, 0], ['GT3', gt3, 12, 0.1]] as const)('%s: a light tap at 30 km/h does not leave a slow tail', (_n, car, ticks, left) => {
+    const c = car();
+    let { s, p } = at(c, 30);
+    const v = 30 * KMH, thr = (x: S): Partial<InputFrame> => ({ throttle: x.car.v < v ? 1 : 0 });
+    for (let i = 0; i < ticks; i++) s = tick(s, p, { ...thr(s), right: 1 });
+    for (let i = 0; i < 5 * HZ; i++) s = tick(s, p, thr(s));
+    expect(s.car.st, 'left after 5 s').toBeLessThanOrEqual(left); // measured S15 0 (was 0.028), GT3 0.077 (was 0.16)
+  });
+
+  it.each(cars)('%s: parked and below 3 km/h the wheel moves less than 0.05 in 2 s', (_n, car) => {
+    for (const kmh of [0, 2.5]) for (const st0 of [1, -0.5]) { // S15 at exactly 3 km/h: 0.059
       const { st } = release(car(), kmh, st0, 2);
       expect(Math.abs(st[st.length - 1]! - st0), `${kmh} km/h from ${st0}`).toBeLessThan(0.05);
     }
@@ -87,7 +113,8 @@ describe('the return grows with speed and is nothing when parked (S005-AC-02)', 
 });
 
 describe('the return is weaker while the front tyres slide (S005-AC-03)', () => {
-  const FRONT_ONLY: Record<string, string[]> = { 's15-drift': ['50/-1', '100/-1'], gt3: ['50/-1'] };
+  // S005-T8: the slide is read at the rear axle past min(steerSlideBeta, peak), so the S15 at 50 km/h full lock (rear 0.10-0.12 rad) now counts as sliding.
+  const FRONT_ONLY: Record<string, string[]> = { 's15-drift': ['100/-1'], gt3: ['50/-1'] };
   /**
    * Same speed, same steering, released: the car is set with a yaw rate that puts the front slip at `k` times the
    * tyre peak (no body slip, so no countersteer lock). Returns the steering travel in the first tick, per second, and
@@ -97,7 +124,7 @@ describe('the return is weaker while the front tyres slide (S005-AC-03)', () => 
     const { s, p } = at(c, kmh), V = kmh * KMH, delta = steer(c, { ...s.car, st: st0, beta: 0 }, V);
     const r = (V * Math.tan(delta - k * c.tirePeakSlip * Math.sign(st0))) / c.la;
     const after = tick({ ...s, car: { ...s.car, st: st0, r } }, p, {});
-    return { rate: (Math.abs(st0) - Math.abs(after.car.st)) * HZ, rearSlides: Math.abs(Math.atan2(-c.lb * r, V)) > c.tirePeakSlip };
+    return { rate: (Math.abs(st0) - Math.abs(after.car.st)) * HZ, rearSlides: Math.abs(Math.atan2(-c.lb * r, V)) > Math.min(c.steerSlideBeta, c.tirePeakSlip) };
   }
   /** The tyre-driven return alone (slide return off), as AC-03 compares it. */
   const firstRate = (c: CarParams, kmh: number, st0: number, k: number): number => firstTick({ ...c, steerSlideShare: 0 }, kmh, st0, k).rate;
@@ -151,7 +178,7 @@ describe('the return is weaker while the front tyres slide (S005-AC-03)', () => 
   });
 
   it('the return strength is read from the car file, and zero gain keeps the wheel where it is', () => {
-    const off = loadCarParams({ ...s15Json, steerCentreGain: 0 }, 'test.json');
+    const off = loadCarParams({ ...s15Json, steerCentreGain: 0, steerReturnMin: 0 }, 'test.json');
     for (const x of release(off, 100, 0.5, 2).st) expect(x).toBe(0.5);
     for (const bad of [{ steerCentreGain: -1 }, { steerCasterShare: 1.5 }, { steerTrailFade: 0.5 }, { steerCentreGain: 'fast' }])
       expect(() => loadCarParams({ ...s15Json, ...bad }, 'test.json'), JSON.stringify(bad)).toThrow(DataError);
@@ -224,7 +251,7 @@ describe('while the car slides a released wheel returns at the key speed (S005-T
   });
 
   it('the slide threshold and the rate share are validated car data; share 0 turns the slide return off', () => {
-    for (const bad of [{ steerSlideBeta: -0.1 }, { steerSlideBeta: 2 }, { steerSlideShare: 1.5 }, { steerSlideShare: 'fast' }])
+    for (const bad of [{ steerSlideBeta: -0.1 }, { steerSlideBeta: 2 }, { steerSlideShare: 5 }, { steerSlideShare: 'fast' }, { steerReturnSoftSteer: 1.5 }, { steerReturnMin: -0.1 }, { steerReturnMinSpeed: 'fast' }])
       expect(() => loadCarParams({ ...s15Json, ...bad }, 'test.json'), JSON.stringify(bad)).toThrow(DataError);
     const { steerSlideBeta: _drop, ...missing } = s15Json;
     expect(() => loadCarParams(missing, 'test.json')).toThrow(/steerSlideBeta/);
@@ -233,5 +260,49 @@ describe('while the car slides a released wheel returns at the key speed (S005-T
     const a = tick({ ...s, car: st }, p, {}), b = tick({ ...s, car: st }, open(on), {});
     expect(0.8 - a.car.st).toBeLessThan(0.8 - b.car.st);
     expect(0.8 - a.car.st, 'only the slow tyre return is left').toBeLessThan(0.2 / steerLockTime(on, V) / HZ);
+  });
+});
+
+// S005-T8 (blind test M5): released from full lock in a slow tight turn the wheel used to jump (S15 1.0 to 0.42 and GT3
+// 1.0 to 0.71-0.81 in 0.1 s at 12-25 km/h), because the 7-13 deg body slip of a tight turn is geometry but started the
+// slide return. The slide is now read at the rear axle and needs drift speed, so the return is smooth there.
+describe('no jump when a slow tight turn is released (S005-T8 M5)', () => {
+  it.each(cars)('%s: from full lock at 12-40 km/h the wheel moves at most 0.12 in the first 0.1 s, towards centre', (_n, car) => {
+    const c = car();
+    for (const kmh of [12, 15, 20, 25, 30, 40]) {
+      let { s, p } = at(c, kmh);
+      const v = kmh * KMH;
+      // Right key 1.5 s with a gentle ideal throttle that holds speed without wheelspin, then no keys and no pedals.
+      for (let i = 0; i < 1.5 * HZ; i++) s = tick({ ...s, car: { ...s.car, t: s.car.v < v ? Math.min(1, (v - s.car.v) * 2 + 0.15) : 0 } }, p, { right: 1 });
+      expect(s.car.st, `${kmh} km/h held at full lock`).toBe(1);
+      let prev = 1;
+      for (let i = 0; i < 6; i++) {
+        s = tick(s, p, {});
+        expect(s.car.st, `${kmh} km/h tick ${i}`).toBeLessThanOrEqual(prev);
+        prev = s.car.st;
+      }
+      expect(1 - prev, `${kmh} km/h travel in the first 0.1 s`).toBeLessThanOrEqual(0.12);
+    }
+  });
+});
+
+// S005-T8 (blind test M5, Main Dev option 5B): below about 11 km/h the model has no slip angles, so the released wheel
+// used to stay at full lock forever and the car circled. The slow branch now gives the front axle its share of the
+// turn's side force, so the wheel eases back from 4 km/h up (S15 after 2 s from full lock at 4/6/8/10 km/h: 0.93/0.86/0.78/0.71).
+describe('a released wheel eases back in a very slow turn (S005-T8 M5)', () => {
+  it.each(cars)('%s: from full lock at 6 and 10 km/h the wheel moves towards centre, smoothly', (_n, car) => {
+    const c = car();
+    for (const kmh of [6, 10]) {
+      let { s, p } = at(c, kmh);
+      for (let i = 0; i < 1.5 * HZ; i++) s = tick({ ...s, car: { ...s.car, t: s.car.v < kmh * KMH ? 0.3 : 0 } }, p, { right: 1 });
+      let prev = s.car.st;
+      for (let i = 0; i < 2 * HZ; i++) {
+        s = tick(s, p, {});
+        expect(prev - s.car.st, `${kmh} km/h tick ${i}`).toBeGreaterThanOrEqual(0);
+        expect(prev - s.car.st, `${kmh} km/h tick ${i}: no jump`).toBeLessThan(0.01);
+        prev = s.car.st;
+      }
+      expect(1 - prev, `${kmh} km/h travel in 2 s`).toBeGreaterThan(0.04);
+    }
   });
 });

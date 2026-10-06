@@ -49,8 +49,13 @@ export const CAR_SCHEMA = {
   // S005-T3 (Main Dev option 1B): while the car slides, a released wheel returns to centre at a share of the key speed,
   // whatever the front slip, standing in for the caster pulling a free wheel quickly in a slide; the slow tyre return
   // above stays for normal driving. Without it a keyboard catch released at the right moment spun the S15 the other way.
-  steerSlideBeta: num(0, 1.5), // rad, body slip above which the car counts as sliding for the steering return (rear slip past tirePeakSlip also counts) � 0.1 � tuned (S005-T3, Main Dev option 1B)
-  steerSlideShare: num(0, 1), // share of the key rate at the current speed for that slide return; 0 = off (only the tyre return) � 1 � tuned (S005-T3, Main Dev option 1B)
+  steerSlideBeta: num(0, 1.5), // rad, slip at the rear axle above which the car counts as sliding for the steering return (or past tirePeakSlip if lower; only above drift speed, S005-T8) · 0.1 · tuned (S005-T3, Main Dev option 1B)
+  steerSlideShare: num(0, 4), // share of the key rate at the current speed for that slide return; 0 = off (only the tyre return) · 2 (S005-T8 option 2B: 1 left 0-0.05 s of countersteer overhold at 100-150 km/h, 2 tolerates 0.2 s) · tuned (S005-T3, Main Dev option 1B)
+  // S005-T8 (Main Dev options 4B and m1A): near centre the key-rate limit shrinks, so key taps at speed add up instead of
+  // being undone between taps, and above a speed a small minimum return clears the slow tail a light tap used to leave.
+  steerReturnSoftSteer: num(0, 1), // steering travel below which the return limit shrinks in proportion (limit x |st| / this); 0 = off · 0.3 (100 ms taps every 250 ms at 200 km/h reach 0.20 S15 / 0.16 GT3, was 0.18 / 0.11) · tuned (S005-T8 option 4B)
+  steerReturnMin: num(0, 1), // share of full travel per second the released wheel always returns at above steerReturnMinSpeed (unless sliding faster) · 0.1 · tuned (S005-T8 option m1A)
+  steerReturnMinSpeed: num(0, 100), // m/s, speed above which that minimum return acts · 5.556 = 20 km/h · tuned (S005-T8 option m1A)
   throttleRise: num(0.01, 100), // 1/s · sim() 2.0 · tuned
   throttleFall: num(0.01, 100), // 1/s · sim() 1.5 · tuned
   brakeRise: num(0.01, 100), // 1/s · sim() 1.1 · tuned
@@ -60,7 +65,7 @@ export const CAR_SCHEMA = {
   brakeRear: num(0, 1), // rear brake share · 0.3 · tuned
   brakeLockMargin: num(0, 1), // share of grip a brake can use before lock · 0.98 · tuned
   rearBrakeMaxShare: num(0, 1), // most of the rear grip the rear brake may take, like a brake balance valve · 0.75 · tuned (S003-T3, Daniel option 1B)
-  rearCornerGrip: num(0.5, 2), // rear cornering grip factor over the front, a stability margin; traction and braking unchanged · 1.05 · tuned (S003-T3, Daniel option 2B); S15 1.15 (S004-T11: settles at the limit with the wheels straight; stands in for front-biased roll stiffness)
+  rearCornerGrip: num(0.5, 2), // rear cornering grip factor over the front, a stability margin; traction and braking unchanged · 1.05 · tuned (S003-T3, Daniel option 2B); GT3 1.09 (S005-T8 option 3A; 1.08 alone left 10.6 deg once the countersteer cap of 2B was in: keeps a corner brake from rotating on once both axles pass their peak); S15 1.15 (S004-T11: settles at the limit with the wheels straight; stands in for front-biased roll stiffness)
   lockUsage: num(0, 5), // front use shown while locked · 1.15 · tuned
   dragCoef: num(0, 0.01), // 1/m, aero drag per v^2 · 0.00036 · tuned
   rollingDecel: num(0, 5), // m/s2 when moving · 0.15 · tuned

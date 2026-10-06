@@ -87,3 +87,24 @@ describe('front wheel lock in a full stop from 200 km/h (S005-AC-08)', () => {
     expect(l.dist, 'locking costs no distance in this model').toBeGreaterThan(base.dist);
   });
 });
+
+// S005-T8 (blind test M1): with the brake held the car comes to rest and stays there. Before the fix the brake only
+// acted above 0.3 m/s, so the car settled at about 1.03 km/h in 1st and crept 4-10 m in 10-20 s.
+describe('brake held stops the car and keeps it stopped (S005-T8 M1)', () => {
+  const run = (car: typeof s15, kmh: number, throttleS: number): { v: number; creep: number } => {
+    const p = open(car());
+    let s: CarState = { ...createState(1, createCar(p)).car, vx: kmh * KMH, v: kmh * KMH, gear: kmh > 0 ? 4 : 0 };
+    for (let i = 0; i < throttleS * 60; i++) s = carStep(s, { ...idle, throttle: 1 }, p, TICK);
+    for (let i = 0; i < 10 * 60; i++) s = carStep(s, { ...idle, brake: 1 }, p, TICK);
+    const x0 = s.x, y0 = s.y;
+    for (let i = 0; i < 20 * 60; i++) s = carStep(s, { ...idle, brake: 1 }, p, TICK);
+    return { v: s.v, creep: Math.hypot(s.x - x0, s.y - y0) };
+  };
+  it.each([['S15', s15], ['GT3', gt3]] as const)('%s: from 200 km/h, after 1 s of throttle from rest, and from rest', (_n, car) => {
+    for (const [kmh, thr] of [[200, 0], [0, 1], [0, 0]] as const) {
+      const r = run(car, kmh, thr);
+      expect(r.v, `${kmh} km/h, ${thr} s throttle: speed`).toBe(0);
+      expect(r.creep, `${kmh} km/h, ${thr} s throttle: metres crept in 20 s`).toBe(0);
+    }
+  });
+});

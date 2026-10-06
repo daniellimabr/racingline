@@ -47,7 +47,10 @@ export function steer(c: CarParams, s: CarState, spd: number): number {
   let d = sh * dLim(c, spd);
   if (Math.abs(s.beta) > c.counterBetaOnset && Math.sign(s.st) === Math.sign(s.beta)) {
     const w = Math.min(1, Math.abs(s.beta) / c.counterBetaFull);
-    d = Math.sign(s.st) * ((1 - w) * Math.abs(d) + w * Math.max(Math.abs(d), Math.abs(sh) * c.maxSteer));
+    // S005-T8 (Main Dev option 2B): the extra countersteer lock goes at most as far as pointing the front wheels along
+    // the direction of travel (wheel angle = body slip); more only throws the car into the opposite slide when held on.
+    const lock = Math.min(Math.abs(sh) * c.maxSteer, Math.abs(s.beta));
+    d = Math.sign(s.st) * ((1 - w) * Math.abs(d) + w * Math.max(Math.abs(d), lock));
   }
   return d;
 }
@@ -119,8 +122,18 @@ export function phys(s: CarState, dt: number, p: SimParams, surf: AxleSurface): 
     s.vy *= Math.pow(0.0005, dt);
     s.af = 0;
     s.ar = 0;
+    // S005-T8 (Main Dev option 5B): the front axle's share of the turn's side force, so the released wheel eases back in
+    // a slow turn too (below about 3 km/h it is too small to move it); its sign follows the steering, as in the slip branch.
+    fy = (s.vx * s.r * LB) / L;
     const ax = Fxr + Fxf + dx;
     s.vx += ax * dt;
+    // S005-T8 (M1): below 0.3 m/s the brakes above are off (mv), so a held brake left the car creeping at about
+    // 1 km/h. There a held brake acts as static friction: it takes up to its full force out of the speed, never
+    // reversing it, so the car comes to rest and stays there (against the drive too, up to the brake force).
+    if (!mv && D > 0) {
+      const hold = (c.brakeFront + c.brakeRear) * D * dt;
+      s.vx = Math.abs(s.vx) <= hold ? 0 : s.vx - Math.sign(s.vx) * hold;
+    }
     s.axp = ax;
     s.useF = fLong;
     s.useR = rLong;

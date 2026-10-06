@@ -22,7 +22,7 @@ describe('GT3 lateral grip vs speed (S002-AC-07)', () => {
     expect(g200).toBeGreaterThan(g80 * 1.25);
     // ADR-004 amended 2026-10-05: the S003 rear cornering margin (rearCornerGrip 1.05) raised 1.65/2.21 g.
     expect(g80).toBeCloseTo(1.7, 1);
-    expect(g200).toBeCloseTo(2.29, 1);
+    expect(g200).toBeCloseTo(2.34, 1); // S005-T8: GT3 rear grip 1.05 -> 1.09 raised 2.29 to 2.34 g
   });
 
   it('stays flat for the S15, which has no aero', () => {
