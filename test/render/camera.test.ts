@@ -5,7 +5,7 @@ import { centerlineAt } from '../../src/data/track.ts';
 import { TRACKS } from '../../src/tracks/index.ts';
 import { followCamera, MAX_ZOOM, MIN_ZOOM, toScreen, viewRect } from '../../src/render/camera.ts';
 import { SCREEN_H, SCREEN_W } from '../../src/render/scene.ts';
-import { buildTrackArt, visibleSegments } from '../../src/render/track.ts';
+import { buildTrackArt, drawTrackMinimap, MINI, trackMiniDot, visibleSegments } from '../../src/render/track.ts';
 import { buildLot, GRASS_TILE, grassTiles, LOT_MINI, lotMiniDot, WORLD_H, WORLD_W } from '../../src/render/lot.ts';
 import { drawScene } from '../../src/render/scene.ts';
 import { createView } from '../../src/render/view.ts';
@@ -147,5 +147,71 @@ describe('driving across Interlagos', () => {
   it('draws nothing of the track when the camera is far from it', () => {
     const cam = followCamera({ x: 50_000, y: 50_000, h: 0, beta: 0, v: 0 }, PX, 1);
     expect(visibleSegments(art, viewRect(cam, 0))).toEqual([]);
+  });
+
+  // S004-T10 (blind test): straight on at S do Senna for 18 to 30 s the dot left the minimap, about 85 px below it.
+  const box = { x0: MINI.x, y0: MINI.y, x1: MINI.x + MINI.w, y1: MINI.y + MINI.h };
+  const xs = interlagos.points.map((p) => p[0]), ys = interlagos.points.map((p) => p[1]);
+  const lo = [Math.min(...xs), Math.min(...ys)], hi = [Math.max(...xs), Math.max(...ys)];
+  const farOff: [string, number, number][] = [
+    ['south, past S do Senna', 200, hi[1]! + 900], ['north', 0, lo[1]! - 900], ['east', hi[0]! + 900, 0], ['west', lo[0]! - 900, 0],
+    ['south-east', hi[0]! + 700, hi[1]! + 700],
+  ];
+
+  it.each(farOff)('keeps the minimap dot on the minimap edge nearest the car when it is far off (%s)', (_, x, y) => {
+    const d = trackMiniDot(art, x, y);
+    expect(d.inside).toBe(false);
+    expect(d.x).toBeGreaterThanOrEqual(box.x0);
+    expect(d.x).toBeLessThanOrEqual(box.x1);
+    expect(d.y).toBeGreaterThanOrEqual(box.y0);
+    expect(d.y).toBeLessThanOrEqual(box.y1);
+    // Nearest edge: the dot is pressed against the side the car went out of.
+    const free = { x: x * art.mini.k + art.mini.ox, y: y * art.mini.k + art.mini.oy };
+    if (free.y > box.y1) expect(d.y).toBeGreaterThan(box.y1 - 5);
+    if (free.y < box.y0) expect(d.y).toBeLessThan(box.y0 + 5);
+    if (free.x > box.x1) expect(d.x).toBeGreaterThan(box.x1 - 5);
+    if (free.x < box.x0) expect(d.x).toBeLessThan(box.x0 + 5);
+    // Drawn there with the same white ring as on the lot.
+    const rec = recordingContext();
+    drawTrackMinimap(rec.ctx, art, x, y, '#c00');
+    const i = rec.calls.findIndex(([k, a]) => k === 'arc' && a[2] === 3.5);
+    expect(rec.calls[i]![1].slice(0, 2)).toEqual([d.x, d.y]);
+    expect(rec.calls.slice(i).some(([k]) => k === 'stroke')).toBe(true);
+  });
+
+  it('puts the dot where the car is, without a ring, everywhere on the track', () => {
+    for (let s = 0; s < interlagos.length; s += 50) {
+      const at = centerlineAt(interlagos, s), d = trackMiniDot(art, at.x, at.y);
+      expect(d.inside, `s ${s}`).toBe(true);
+      expect(d.x).toBeCloseTo(at.x * art.mini.k + art.mini.ox, 6);
+      expect(d.y).toBeCloseTo(at.y * art.mini.k + art.mini.oy, 6);
+    }
+    const rec = recordingContext();
+    drawTrackMinimap(rec.ctx, art, 0, 0, '#c00');
+    const i = rec.calls.findIndex(([k, a]) => k === 'arc' && a[2] === 3.5);
+    expect(rec.calls.slice(i).some(([k]) => k === 'stroke')).toBe(false);
+  });
+
+  it('covers the whole view with the lot grass tiles on Interlagos, so the motion shows far off the track', () => {
+    for (const zoom of [MIN_ZOOM, MAX_ZOOM]) {
+      const cam = followCamera({ x: 200, y: hi[1]! + 900, h: 1.5, beta: 0, v: 20 }, PX, zoom);
+      const r = viewRect(cam, 0), tiles = grassTiles(r, false);
+      for (let i = 0; i <= 10; i++) {
+        for (let j = 0; j <= 10; j++) {
+          const wx = r.x0 + ((r.x1 - r.x0) * i) / 10, wy = r.y0 + ((r.y1 - r.y0) * j) / 10;
+          expect(tiles.some(([tx, ty]) => wx >= tx && wx < tx + GRASS_TILE && wy >= ty && wy < ty + GRASS_TILE), `${wx}, ${wy}`).toBe(true);
+        }
+      }
+      expect(tiles.length).toBeLessThan(60);
+    }
+    const rec = recordingContext();
+    const lot = buildLot(factoryFor(rec.ctx), TEST_LOT);
+    rec.calls.length = 0;
+    const params = createSimParams(loadCarParams(s15, 's15-drift.json'));
+    const car = { ...createCar(params), x: 200, y: hi[1]! + 900, v: 10 };
+    drawScene(rec.ctx, { car, params, view: createView(1), lot, paused: false, dt: 1 / 60, track: art, lap: null });
+    const images = rec.calls.filter(([k]) => k === 'drawImage').map(([, a]) => a[0]);
+    expect(images.filter((im) => im === lot.grass).length).toBeGreaterThan(0);
+    expect(images).not.toContain(lot.image);
   });
 });

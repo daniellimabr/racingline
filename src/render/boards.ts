@@ -12,11 +12,13 @@ export type MarkedTrack = Pick<Track, 'points' | 'verge' | 'length'> & Partial<P
 /** Boards stand this far before each braking point, m, in driving order. */
 export const BOARD_DISTANCES = [200, 150, 100, 50] as const;
 /**
- * A braking point gets boards only when it is at least this far after the previous one, m, wrapping round
- * the lap (Main Dev, S004-T6 review): closer ones would stand inside the previous corner (Laranjinha after
- * Ferradura on Interlagos).
+ * A board stands only on straight road (Main Dev, S004-T10, replacing the 300 m gap rule): the road may turn
+ * at most STRAIGHT_MAX_TURN degrees in total over STRAIGHT_LOOK metres either side of it. Tuned on Interlagos:
+ * boards on straights turn at most 1.9 degrees there, boards inside Ferradura, Pinheirinho, Mergulho or at
+ * Bico de Pato's turn-in at least 15.3; 50 m either side would also drop boards 25 m after a corner's exit.
  */
-export const MIN_BRAKE_GAP = 300;
+export const STRAIGHT_LOOK = 25;
+export const STRAIGHT_MAX_TURN = 10;
 /** Board centre beyond the outer edge of the verge, m. */
 const BOARD_GAP = 4;
 /** How far after a braking point the corner is looked for, m, and the bend that counts as the corner, rad. */
@@ -44,6 +46,21 @@ export interface KerbPath {
 }
 
 const wrapAngle = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
+const headingAt = (track: Pick<Track, 'points'>, s: number): number => {
+  const at = centerlineAt(track, s);
+  return Math.atan2(at.dy, at.dx);
+};
+
+/** Total turning of the road (left and right both count) within STRAIGHT_LOOK m either side of `s`, degrees. */
+export function turnAround(track: Pick<Track, 'points'>, s: number): number {
+  let prev = headingAt(track, s - STRAIGHT_LOOK), sum = 0;
+  for (let d = 1 - STRAIGHT_LOOK; d <= STRAIGHT_LOOK; d++) {
+    const h = headingAt(track, s + d);
+    sum += Math.abs(wrapAngle(h - prev));
+    prev = h;
+  }
+  return (sum * 180) / Math.PI;
+}
 
 /** The outside of the first corner after `s`: a right-hand bend (heading growing, y down) has its outside on the left. */
 export function outsideOf(track: Pick<Track, 'points'>, s: number): Side {
@@ -69,16 +86,15 @@ export function boardsFor(track: MarkedTrack): Board[] {
   if (points.length === 0) return [];
   const lap = track.length, verge = track.verge.reduce((sum, b) => sum + b.width, 0);
   const out: Board[] = [];
-  points.forEach((bp, i) => {
-    const before = i > 0 ? points[i - 1]!.s : points[points.length - 1]!.s - lap;
-    if (points.length > 1 && bp.s - before < MIN_BRAKE_GAP) return;
+  for (const bp of points) {
     const side = outsideOf(track, bp.s);
     for (const d of BOARD_DISTANCES) {
       const s = (((bp.s - d) % lap) + lap) % lap;
+      if (turnAround(track, s) >= STRAIGHT_MAX_TURN) continue;
       const [x, y] = besideAt(track, s, side, (w) => w / 2 + verge + BOARD_GAP);
       out.push({ s, label: String(d), corner: bp.name, side, x, y });
     }
-  });
+  }
   return out;
 }
 
