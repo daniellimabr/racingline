@@ -1,5 +1,8 @@
 // Test-lot artwork (v24 lines 59-72), drawn once into an offscreen canvas. Positions are v24 world pixels.
+// S004-T6: the car can roll 200 to 360 m past the pavement, beyond the picture; there the grass is a small
+// repeating tile, so the follow camera shows the motion, and the minimap keeps the car dot on its edge.
 import type { Lot } from '../sim/index.ts';
+import type { Rect } from './camera.ts';
 
 export const WORLD_W = 2400;
 export const WORLD_H = 1800;
@@ -12,8 +15,16 @@ export interface CanvasLike {
 }
 export type CanvasFactory = (width: number, height: number) => CanvasLike;
 
+/** Grass tile size, world px; WORLD_W and WORLD_H are whole multiples, so a tile never overlaps the picture. */
+export const GRASS_TILE = 300;
+/** Lot minimap box on screen (the whole lot picture, scaled). */
+export const LOT_MINI = { x: 500, y: 10, w: 130, h: (WORLD_H * 130) / WORLD_W } as const;
+const MINI_DOT = 3.5;
+
 export interface LotArt {
   image: CanvasImageSource;
+  /** One grass tile, drawn round the picture where the view goes past it. */
+  grass: CanvasImageSource;
   cones: [number, number][];
   lot: Lot;
 }
@@ -96,5 +107,48 @@ export function buildLot(make: CanvasFactory, lot: Lot): LotArt {
     o.arc(p[0], p[1], 1.4, 0, 7);
     o.fill();
   }
-  return { image: oc as unknown as CanvasImageSource, cones, lot };
+  return { image: oc as unknown as CanvasImageSource, grass: grassTile(make), cones, lot };
+}
+
+/** The lot's grass with lighter patches, wrapped at the edges so tiles join without a seam. */
+function grassTile(make: CanvasFactory): CanvasImageSource {
+  const T = GRASS_TILE, tc = make(T, T), g = tc.getContext('2d');
+  if (!g) throw new Error('2D canvas is not available');
+  g.fillStyle = '#3f7a3a';
+  g.fillRect(0, 0, T, T);
+  g.fillStyle = '#4a8a44';
+  for (let i = 0; i < 4; i++) {
+    const x = (i * 131 + 40) % T, y = (i * 197 + 70) % T, r = 20 + ((i * 7) % 40);
+    for (const ox of [-T, 0, T]) {
+      for (const oy of [-T, 0, T]) {
+        g.beginPath();
+        g.arc(x + ox, y + oy, r, 0, 7);
+        g.fill();
+      }
+    }
+  }
+  return tc as unknown as CanvasImageSource;
+}
+
+/** Top-left corners of the grass tiles that cover `view` (world px) outside the lot picture. */
+export function grassTiles(view: Rect): [number, number][] {
+  const T = GRASS_TILE, out: [number, number][] = [];
+  for (let ty = Math.floor(view.y0 / T) * T; ty <= view.y1; ty += T) {
+    for (let tx = Math.floor(view.x0 / T) * T; tx <= view.x1; tx += T) {
+      if (tx >= 0 && tx < WORLD_W && ty >= 0 && ty < WORLD_H) continue; // the picture covers it
+      out.push([tx, ty]);
+    }
+  }
+  return out;
+}
+
+/** Car dot on the lot minimap (screen px), held on the minimap's edge towards the car when it is off the picture. */
+export function lotMiniDot(wx: number, wy: number): { x: number; y: number; inside: boolean } {
+  const m = LOT_MINI.w / WORLD_W, inside = wx >= 0 && wx <= WORLD_W && wy >= 0 && wy <= WORLD_H;
+  const clamp = (v: number, lo: number, hi: number): number => Math.min(hi - MINI_DOT, Math.max(lo + MINI_DOT, v));
+  return {
+    x: clamp(LOT_MINI.x + wx * m, LOT_MINI.x, LOT_MINI.x + LOT_MINI.w),
+    y: clamp(LOT_MINI.y + wy * m, LOT_MINI.y, LOT_MINI.y + LOT_MINI.h),
+    inside,
+  };
 }

@@ -1,8 +1,9 @@
 // Track drawing (S003-T7): road, kerbs and grass from the checked track file (ADR-005), plus the start line
-// and sector marks. The geometry is turned into world-px pieces once per track; each frame draws only the
+// and sector marks; since S004-T6 also the distance boards and wider apex kerbs (boards.ts). The geometry is turned into world-px pieces once per track; each frame draws only the
 // pieces inside the camera's view. Reads the track, never writes it.
 import type { Track, TrackLine } from '../data/track.ts';
 import type { Rect } from './camera.ts';
+import { boardsFor, kerbsFor, type Board, type TrackMarks } from './boards.ts';
 
 /** One centerline piece in world px: from point i to point i+1, with its width and distance from the start. */
 export interface Segment {
@@ -29,7 +30,14 @@ export interface TrackArt {
   readonly bands: readonly Band[];
   /** Minimap: scale (minimap px per m) and offset that fit the whole circuit in the minimap box. */
   readonly mini: { readonly k: number; readonly ox: number; readonly oy: number };
+  /** Distance boards before each braking point, m (none when the track has no braking points). */
+  readonly boards: readonly Board[];
+  /** Wider apex kerbs: the middle of each band in world px, its width in px, lap distance in px, and bounds. */
+  readonly kerbs: readonly { readonly pts: readonly (readonly [number, number])[]; readonly width: number; readonly s: number; readonly box: Rect }[];
 }
+
+/** Board size and number height, m: the number stays above 15 screen px at the widest zoom. */
+const BOARD = { w: 6, h: 3.6, text: 2.6 } as const;
 
 /** Surface colours by name; an unknown name draws in a neutral grey instead of failing. */
 const SURFACE_COLOR: Readonly<Record<string, string>> = { asphalt: '#4b4f55', kerb: '#e9e4d4', grass: '#3f7a3a', gravel: '#b9a77f' };
@@ -40,7 +48,7 @@ export const surfaceColor = (name: string): string => (Object.hasOwn(SURFACE_COL
 
 export const MINI = { x: 500, y: 10, w: 130, h: 100 } as const;
 
-export function buildTrackArt(track: Track, px: number): TrackArt {
+export function buildTrackArt(track: Track & TrackMarks, px: number): TrackArt {
   const pts = track.points, n = pts.length;
   const vergeTotal = track.verge.reduce((sum, b) => sum + b.width, 0);
   const segments: Segment[] = [];
@@ -65,7 +73,12 @@ export function buildTrackArt(track: Track, px: number): TrackArt {
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const k = Math.min((MINI.w - 8) / (x1 - x0), (MINI.h - 8) / (y1 - y0));
   const mini = { k, ox: MINI.x + (MINI.w - (x1 - x0) * k) / 2 - x0 * k, oy: MINI.y + (MINI.h - (y1 - y0) * k) / 2 - y0 * k };
-  return { track, px, segments, bands, mini };
+  const kerbs = kerbsFor(track).map((k) => {
+    const pts = k.pts.map(([x, y]) => [x * px, y * px] as const), pad = k.width * px;
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    return { pts, width: k.width * px, s: k.s * px, box: { x0: Math.min(...xs) - pad, y0: Math.min(...ys) - pad, x1: Math.max(...xs) + pad, y1: Math.max(...ys) + pad } };
+  });
+  return { track, px, segments, bands, mini, boards: boardsFor(track), kerbs };
 }
 
 const overlaps = (a: Rect, b: Rect): boolean => a.x0 <= b.x1 && a.x1 >= b.x0 && a.y0 <= b.y1 && a.y1 >= b.y0;
@@ -124,6 +137,22 @@ export function drawTrack(c: CanvasRenderingContext2D, art: TrackArt, view: Rect
       c.lineDashOffset = 0;
     }
   }
+  // Wider apex kerbs: red and white stripes just outside the edge, over the 1 m verge kerb on that stretch.
+  c.lineCap = 'butt';
+  for (const k of art.kerbs) {
+    if (!overlaps(k.box, view)) continue;
+    c.lineWidth = k.width;
+    c.beginPath();
+    for (const [x, y] of k.pts) c.lineTo(x, y);
+    c.strokeStyle = surfaceColor('kerb');
+    c.stroke();
+    c.strokeStyle = KERB_STRIPE;
+    c.setLineDash([KERB_STRIPE_M * px, KERB_STRIPE_M * px]);
+    c.lineDashOffset = k.s;
+    c.stroke();
+    c.setLineDash([]);
+    c.lineDashOffset = 0;
+  }
   c.lineCap = 'round';
   c.strokeStyle = surfaceColor(art.track.road);
   for (const g of vis) strokeSegment(c, g, g.width);
@@ -153,9 +182,31 @@ export function drawTrack(c: CanvasRenderingContext2D, art: TrackArt, view: Rect
     c.fillStyle = '#ffc83d';
     c.fillText('S' + (i + 1), (l.a[0] + (dx / d) * 2.5) * px, (l.a[1] + (dy / d) * 2.5) * px);
   });
+  drawBoards(c, art, view);
   c.textAlign = 'left';
   c.restore();
   return vis.length;
+}
+
+/** Distance boards: white panels with the distance in black, upright on screen (the camera never rotates). */
+function drawBoards(c: CanvasRenderingContext2D, art: TrackArt, view: Rect): void {
+  const px = art.px, hw = (BOARD.w / 2) * px, hh = (BOARD.h / 2) * px;
+  const shown = art.boards.filter((b) => b.x * px + hw >= view.x0 && b.x * px - hw <= view.x1 && b.y * px + hh >= view.y0 && b.y * px - hh <= view.y1);
+  if (shown.length === 0) return;
+  c.font = '700 ' + Math.round(BOARD.text * px) + 'px sans-serif';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.lineWidth = 0.3 * px;
+  for (const b of shown) {
+    const x = b.x * px, y = b.y * px;
+    c.fillStyle = '#f4f1ea';
+    c.fillRect(x - hw, y - hh, 2 * hw, 2 * hh);
+    c.strokeStyle = '#111';
+    c.strokeRect(x - hw, y - hh, 2 * hw, 2 * hh);
+    c.fillStyle = '#111';
+    c.fillText(b.label, x, y + 0.1 * px);
+  }
+  c.textBaseline = 'alphabetic';
 }
 
 /** Minimap of the whole circuit (screen px) with the car as a dot. */
