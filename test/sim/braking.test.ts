@@ -18,12 +18,12 @@ import { gt3, idle, KMH, open, s15 } from './gt3-helpers.ts';
 
 const G = 9.81, TICK = { dt: 1 / 60, substeps: 10 };
 
-interface Stop { meanG: number; peakG: number; dist: number; gripSeen: Set<number> }
+interface Stop { meanG: number; peakG: number; dist: number; gripSeen: Set<number>; lockS: number; time: number }
 
 /** Full brake from `kmh` straight ahead until stopped. */
 function stop(p: SimParams, s0: CarState, kmh: number): Stop {
   let s: CarState = { ...s0, vx: kmh * KMH, v: kmh * KMH, gear: 4, rpm: 6000 };
-  let t = 0, peak = 0, dist = 0;
+  let t = 0, peak = 0, dist = 0, lock = 0;
   const gripSeen = new Set<number>();
   while (s.v > 0.3) {
     if (t > 30 * 60) throw new Error(`${p.car.id} never stopped`);
@@ -33,8 +33,9 @@ function stop(p: SimParams, s0: CarState, kmh: number): Stop {
     if (p.track && p.surfaceAt) { const a = trackSurface(p.track, p.surfaceAt, p.car, n); gripSeen.add(a.gripF).add(a.gripR); }
     s = n;
     t++;
+    if (s.lockF) lock++;
   }
-  return { meanG: (kmh * KMH) / (t / 60) / G, peakG: peak / G, dist, gripSeen };
+  return { meanG: (kmh * KMH) / (t / 60) / G, peakG: peak / G, dist, gripSeen, lockS: lock / 60, time: t / 60 };
 }
 
 const onTrack = (car: typeof s15): Stop => {
@@ -63,5 +64,26 @@ describe('braking from 200 km/h on Interlagos asphalt (S004-AC-04)', () => {
     expect(t.meanG).toBeGreaterThan(1.4);
     expect(t.meanG).toBeLessThan(1.7);
     expect(t.dist).toBeCloseTo(113.7, 0); // S004-T11: was 109.4 m before GT3 load sensitivity 0.3
+  });
+});
+
+// S005-AC-08: share of a full stop from 200 km/h with the front wheels locked (test lot, full pedal, no ABS).
+// S005-T3 measured (docs/sprints/SPRINT-005/mailbox/physics-dev-to-main-dev-slides.md): S15 5.8 s of 6.6 s (88%),
+// GT3 3.2 s of 4.0 s (80%). Cause: at full pedal the front brakes ask for more than the front tyres can give at every
+// speed (S15 7.0 against 5.8 m/s2; GT3 12.0 against 10.4 m/s2 at 160 km/h falling to 8.3 m/s2 near the stop as the
+// downforce goes), and the pedal reaches full in 0.9 s; it is the same on any car without ABS, so it is not a
+// physics fault. With a full-pedal force at or below the front grip the fronts never lock (S15 brakeDecel 8).
+// What the model simplifies: a locked tyre keeps 98% of its peak grip (brakeLockMargin), so locking costs no
+// stopping distance (S15 locked 189.7 m against 197.1 m unlocked with brakeDecel 8). The ABS aid stays postponed.
+describe('front wheel lock in a full stop from 200 km/h (S005-AC-08)', () => {
+  it.each([['S15', s15, 0.88], ['GT3', gt3, 0.8]] as const)('%s: front wheels locked for about %s of the stop', (_n, car, share) => {
+    const l = onLot(car);
+    expect(l.lockS / l.time).toBeCloseTo(share, 1);
+  });
+
+  it('the cause is the full-pedal brake force above the front grip: S15 with a full pedal of 8 m/s2 never locks', () => {
+    const p = open({ ...s15(), brakeDecel: 8 }), l = stop(p, createState(1, createCar(p)).car, 200), base = onLot(s15);
+    expect(l.lockS).toBe(0);
+    expect(l.dist, 'locking costs no distance in this model').toBeGreaterThan(base.dist);
   });
 });
