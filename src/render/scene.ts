@@ -451,7 +451,7 @@ export function drawScene(c: CanvasRenderingContext2D, f: Frame): void {
         : s.wspin ? 'Patinando — passou do limite de tração'
         : s.off ? (art ? 'Fora da pista' : 'Fora do pátio')
         : pr.slip ? 'Linha acima da aderência — freie'
-        : ', reduz · . sobe · M automático');
+        : 'Vírgula reduz · Ponto sobe · M automático');
   c.fillStyle = warnMsg ? 'rgb(' + haloRgb(Math.max(0.2, ts.p)).join(',') + ')'
     : s.cut ? '#ff8a7e'
     : s.mode === 'spin' || s.mode === 'rear' ? '#ff8a7e'
